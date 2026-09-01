@@ -21,11 +21,14 @@ const end = html.indexOf("/* ENGINE:END */");
 assert.ok(start > -1 && end > start, "ENGINE markers missing from index.html");
 
 const source = html.slice(html.indexOf("*/", start) + 2, end);
-const { EPS, PRESETS, unionIntervals, unionArea, bboxOf, makeTransform, computeLayout } =
-  new Function(
-    source +
-    "\nreturn { EPS, PRESETS, unionIntervals, unionArea, bboxOf, makeTransform, computeLayout };"
-  )();
+const {
+  EPS, PRESETS, unionIntervals, unionArea, bboxOf, makeTransform, computeLayout,
+  snapCandidates, snapOne, snapMoved, normRect
+} = new Function(
+  source +
+  "\nreturn { EPS, PRESETS, unionIntervals, unionArea, bboxOf, makeTransform, computeLayout," +
+  "\n         snapCandidates, snapOne, snapMoved, normRect };"
+)();
 
 /** Standard settings; individual tests override what they care about. */
 const base = {
@@ -60,6 +63,81 @@ test("bboxOf spans every rectangle", () => {
   assert.equal(bb.y, 0);
   assert.equal(bb.w, 5000);
   assert.equal(bb.h, 4700);
+});
+
+/* ---------------------------------------------------------------- */
+/* Snapping, for dragging areas about on the plan                   */
+/* ---------------------------------------------------------------- */
+
+test("snapCandidates offers both edges of everything but the dragged area", () => {
+  const rects = [{ x: 0, y: 0, w: 1000, h: 800 }, { x: 2000, y: 500, w: 300, h: 200 }];
+  const all = snapCandidates(rects, -1);
+  assert.deepEqual(all.xs, [0, 1000, 2000, 2300]);
+  assert.deepEqual(all.ys, [0, 800, 500, 700]);
+  // The area being moved must not snap to where it already is.
+  assert.deepEqual(snapCandidates(rects, 0).xs, [2000, 2300]);
+});
+
+test("snapOne takes the nearest edge in range and reports it", () => {
+  const edges = [0, 1000, 2400];
+  assert.deepEqual(snapOne(1006, edges, 20, 10), { v: 1000, at: 1000 });
+  assert.deepEqual(snapOne(994, edges, 20, 10), { v: 1000, at: 1000 });
+  // 1044 is out of range of every edge, so it falls back to the grid.
+  assert.deepEqual(snapOne(1044, edges, 20, 10), { v: 1040, at: null });
+});
+
+test("snapOne prefers the closer of two edges within range", () => {
+  assert.equal(snapOne(1012, [1000, 1030], 40, 10).v, 1000);
+  assert.equal(snapOne(1022, [1000, 1030], 40, 10).v, 1030);
+});
+
+test("a dragged area lines up on whichever of its edges is nearest", () => {
+  const rects = [{ x: 0, y: 0, w: 5000, h: 3200 }, { x: 2600, y: 3100, w: 1500, h: 1500 }];
+  const cands = snapCandidates(rects, 1);
+
+  // Dropped just below the big rectangle: its top edge should catch 3200.
+  const down = snapMoved({ x: 2600, y: 3194, w: 1500, h: 1500 }, cands, 20, 10);
+  assert.equal(down.y, 3200);
+  assert.equal(down.gy, 3200);
+
+  // Pushed the other way, the far edge catches the right-hand wall instead.
+  const across = snapMoved({ x: 3494, y: 1000, w: 1500, h: 1500 }, cands, 20, 10);
+  assert.equal(across.x + across.w, 5000);
+  assert.equal(across.gx, 5000);
+});
+
+test("moving an area never changes its size", () => {
+  const rects = [{ x: 0, y: 0, w: 5000, h: 3200 }, { x: 100, y: 100, w: 1234, h: 987 }];
+  const cands = snapCandidates(rects, 1);
+  for (const x of [0, 4, 96, 1003, 4994, -207]) {
+    const s = snapMoved({ x, y: x, w: 1234, h: 987 }, cands, 20, 10);
+    assert.equal(s.w, 1234);
+    assert.equal(s.h, 987);
+  }
+});
+
+test("with nothing to catch, a drag lands on the grid", () => {
+  const s = snapMoved({ x: 1237, y: 884, w: 500, h: 500 }, { xs: [], ys: [] }, 20, 10);
+  assert.deepEqual([s.x, s.y, s.gx, s.gy], [1240, 880, null, null]);
+});
+
+test("a rectangle drawn backwards comes out the right way round", () => {
+  const a = normRect({ x: 100, y: 200 }, { x: 900, y: 800 });
+  const b = normRect({ x: 900, y: 800 }, { x: 100, y: 200 });
+  assert.deepEqual(a, { x: 100, y: 200, w: 800, h: 600 });
+  assert.deepEqual(a, b);
+  // Drawn to a point it is empty rather than negative.
+  assert.deepEqual(normRect({ x: 5, y: 5 }, { x: 5, y: 5 }), { x: 5, y: 5, w: 0, h: 0 });
+});
+
+test("a snapped drag leaves a room the engine can still lay", () => {
+  const rects = PRESETS.l.map(r => ({ ...r }));
+  const cands = snapCandidates(rects, 1);
+  const s = snapMoved({ ...rects[1], x: 2494, y: 3207 }, cands, 20, 10);
+  rects[1] = { x: s.x, y: s.y, w: s.w, h: s.h };
+  const L = computeLayout(cfg({ rects }));
+  assert.ok(L && !L.overflow);
+  assert.ok(L.planksUsed > 0);
 });
 
 /* ---------------------------------------------------------------- */

@@ -25,6 +25,84 @@ tests/engine.test.mjs      Node tests for the geometry, layout maths and file lo
 package.json               scripts only; there are no dependencies
 ```
 
+## The plan view
+
+The drawing is a camera on the room, not a fixed picture of it. `view` holds
+where it points (`cx`, `cy` in room coordinates) and how far back it sits:
+`upp` is **room units per screen pixel**, so a smaller `upp` is further in.
+
+The viewBox is built to the *stage's* aspect ratio rather than the room's,
+which is why the stage has an explicit height. Get that wrong and zooming
+reflows the page under the pointer. `toWorld` and `toScreen` are the exact
+inverses of that mapping, and are what every gesture is expressed in.
+
+Anything that is furniture rather than floor — labels, handles, dimension
+lines, the corner marker — is sized through `px()`, which converts screen
+pixels into room units at the current zoom. That is what keeps it legible when
+you are 20x in. Planks are *not* sized that way; they are real.
+
+`fitToRoom()` deliberately leaves an asymmetric margin: the dimension lines
+hang off the left and top, so those two sides get `FIT_GUTTER` and the other
+two get `FIT_PAD`, and the camera is nudged by half the difference. A symmetric
+margin either crops the figures or wastes half the stage.
+
+The view is **not** part of a saved plan. It is where the user happens to be
+looking, not something about the floor — so it lives on `view`, outside
+`defaultPlan()`, in the same way as `focusRect`.
+
+## Editing on the plan
+
+Areas are dragged, resized and drawn directly on the drawing. Two things about
+how that is wired are load-bearing:
+
+**Hit testing is done in JS, not by SVG event targets.** The edit overlay is
+drawn on top of the planks, so if it took pointer events it would swallow every
+plank tooltip. Instead `g.edit`, `line` and `text` are all `pointer-events:none`
+and `hitTest()` walks `state.rects` in room coordinates. The selected area is
+tested first, so its handles and chips stay reachable where areas overlap. If
+you add anything to the overlay, add it to `hitTest` too — drawing it is only
+half the job.
+
+**Redrawing is throttled to a frame, and panning does not recompute.**
+`scheduleDraw` takes a flag saying whether the *room* changed; panning and
+zooming reuse `lastLayout` and only redraw. During a drag the results and the
+cut list are left alone entirely — they are the expensive half — and catch up
+on drop.
+
+Snapping lives in the engine block because it is geometry, and therefore
+testable: `snapCandidates` / `snapOne` / `snapMoved` / `normRect`. The tolerance
+is passed in as room units worked out from a fixed number of screen pixels, so a
+snap feels the same under the finger at any zoom. A neighbouring edge always
+beats the grid; a drag that catches nothing rounds to `GRID` (10 mm).
+`snapMoved` offers both edges of the dragged rectangle on each axis and takes
+the nearer — and never changes its size, which has a test on it.
+
+`MIN_SIDE` stops a resize being dragged inside out: only the edges the grabbed
+handle owns move, and each stops a minimum side short of its opposite.
+
+## Layout and touch
+
+Above 760 px the page stops being a page and becomes a two-pane app: the body
+does not scroll, the panel and the drawing each scroll on their own, and the
+plan takes the height of the screen. The breakpoint sits *below* an iPad in
+portrait on purpose, so a tablet gets both panes whichever way it is held.
+Under it, one column with the drawing first.
+
+The stage is `touch-action:none` — the pointer handlers own every gesture on
+it, two-finger pinch included. That is only safe because the two-pane layout has
+no page scroll to block. If the wide layout is ever allowed to scroll again,
+that becomes a trap on a touch screen.
+
+`COARSE` (a `pointer:coarse` media query, read once) drives the script side of
+the same idea: handles, hit radius, chips and label sizes all grow for a finger.
+The CSS half is the `@media (pointer:coarse)` block. Change one, change both.
+
+Header and panel widths matter more than they look, now that the shell is a
+fixed height: anything that wraps the header steals that height from the
+drawing. `input[type=text]` is declared after `.plan-name`, so the name field
+needs `.topbar input.plan-name` to keep its width — without it the header wrapped
+onto three rows and cost the plan 96 px.
+
 ## Hard constraints
 
 **Keep it one file.** `index.html` is self-contained by design so it can be
@@ -230,6 +308,9 @@ The tests encode these; break one and something is wrong.
 - `sanitisePlan(serialisePlan(p))` returns `p` unchanged, with no warnings.
 - `sanitisePlan` never throws and always returns a plan `computeLayout` accepts,
   whatever it is handed.
+- Snapping a moved rectangle never changes its width or height.
+- A rectangle drawn from either corner comes out the same way round.
+- The dragged rectangle is never offered as its own snap target.
 
 ## Domain glossary
 
@@ -265,6 +346,11 @@ Don't "fix" these without asking — they are choices, not oversights.
   and per-m² prices are charged on what you take home, not what you lay. Set
   planks per pack to 1 for loose planks.
 - **The cut list caps at 200 rows** to keep the table readable.
+- **Dragging snaps to edges and a 10 mm grid, not to a constraint solver.**
+  There is no "keep these two areas touching" relationship — move one and the
+  other stays where it was put.
+- **No undo.** Dragging is reversible by dragging back, and the plan text in the
+  rail is a manual snapshot, but there is no history stack.
 - `computeLayout` returns `{ overflow: true }` above ~40,000 pieces. That guard
   exists because typing `5000` into a millimetre field while thinking in metres
   would otherwise lock the page up. Keep it.
@@ -273,7 +359,8 @@ Don't "fix" these without asking — they are choices, not oversights.
 
 - Vanilla JS, `"use strict"`, no semicolonless style. Two-space indent.
 - Comments explain *why*, not what. The geometry is the part that needs
-  explaining; the DOM wiring does not.
+  explaining; the DOM wiring does not. The gestures are the exception — what a
+  pointer event is supposed to mean is not obvious from the code.
 - All colours come from CSS custom properties in `:root`. Never hard-code a hex
   value in a rule or in the SVG drawing code — add a token instead.
 - The palette references a cutting mat with oak planks laid on it: dark green
@@ -296,9 +383,10 @@ quick syntax sanity check if you want one.
 
 ## Ideas not yet built
 
-- Drag the rectangles around in the plan view instead of typing coordinates.
 - Underlay and trim quantities (perimeter length is already derivable).
 - A print stylesheet, so the cut list can go in a pocket.
+- Undo, which the plan view rather wants now that a drag can change the room.
+- Rotating an area, which the whole engine currently assumes cannot happen.
 - Deduct the expansion gap properly, which needs a real polygon inset rather
   than a per-rectangle one.
 - Plans in the URL hash, so one can be shared by link rather than by file.

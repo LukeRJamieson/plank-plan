@@ -28,6 +28,11 @@
   --oak-cut:  #C08653;   /* piece cut from a fresh plank */
   --sage:     #86AE8E;   /* piece cut from a saved offcut */
   --alert:    #E06A4E;
+  --slab:     #31403A;   /* bare floor under the planks */
+  --slab-lit: #3D5045;   /* the area being edited */
+  --grain:    rgba(90,60,25,.20);
+  --guide:    #6FD3C0;   /* snap guide, deliberately not the amber */
+  --pressed:  #3A4A41;   /* a picker or tool that is currently chosen */
   --r-sm: 3px;
   --r-md: 6px;
   --shadow: 0 10px 30px rgba(0,0,0,.35);
@@ -65,13 +70,13 @@ button,input,select{font:inherit;color:inherit}
 .headline b{font-size:1.5rem;font-weight:500;color:var(--amber);line-height:1}
 .headline em{font-style:normal;color:var(--ink-dim);font-size:.85rem}
 
-.plan-name{
+.topbar input.plan-name{
   width:min(15rem,38vw);padding:.28rem .45rem;
   background:transparent;border:1px solid transparent;border-radius:var(--r-sm);
   font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;font-weight:600;font-size:.95rem;
 }
-.plan-name:hover{border-color:var(--edge)}
-.plan-name:focus{background:var(--panel-2);border-color:transparent}
+.topbar input.plan-name:hover{border-color:var(--edge)}
+.topbar input.plan-name:focus{background:var(--panel-2);border-color:transparent}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
 .tools{display:flex;gap:.35rem}
 .tools .btn{padding:.3rem .6rem;font-size:.82rem}
@@ -96,19 +101,43 @@ textarea#plan-text{
 }
 textarea#plan-text:focus{outline:2px solid var(--amber);outline-offset:1px}
 
-/* ---------- shell ---------- */
+/* ---------- shell ----------
+   Wide enough for two columns and the page stops being a page: the panel
+   and the drawing each scroll on their own, and the plan gets the whole
+   height of the screen rather than a slot in a scrolling document. That is
+   also what makes it usable on a tablet held landways. */
 .shell{display:grid;grid-template-columns:352px minmax(0,1fr);gap:0;align-items:start}
-@media (max-width:940px){.shell{grid-template-columns:1fr}}
 
 .rail{
   background:var(--panel);
   border-right:1px solid var(--edge);
   padding:1.1rem 1.1rem 3rem;
-  position:sticky;top:57px;max-height:calc(100vh - 57px);overflow-y:auto;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
 }
-@media (max-width:940px){.rail{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--edge)}}
-
 .work{padding:1.1rem 1.3rem 4rem;min-width:0}
+
+/* A tablet held either way is wide enough for both panes, so the
+   breakpoint sits below an iPad in portrait rather than above it. */
+@media (min-width:760px){
+  html{height:100%}
+  body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
+  .topbar{position:static;flex:none}
+  .shell{flex:1;min-height:0;align-items:stretch}
+  .rail{height:100%}
+  .work{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
+}
+@media (min-width:760px) and (max-width:1059px){
+  .shell{grid-template-columns:292px minmax(0,1fr)}
+  .rail{padding:.9rem .75rem 3rem}
+  .work{padding:.9rem .9rem 4rem}
+}
+/* On a phone it is one column, and the drawing comes first: the settings
+   are worth scrolling to, a plan you cannot see is not. */
+@media (max-width:759px){
+  .shell{grid-template-columns:1fr}
+  .work{order:1;padding-bottom:1.5rem}
+  .rail{order:2;border-right:0;border-top:1px solid var(--edge)}
+}
 
 /* ---------- rail sections ---------- */
 .sec{margin-bottom:1.6rem}
@@ -154,8 +183,10 @@ input[type=checkbox]{accent-color:var(--amber);width:1rem;height:1rem;margin:0}
 }
 .area-row .tag{
   font-family:"Bricolage Grotesque";font-weight:800;font-size:.9rem;
-  color:var(--amber);text-align:center;
+  color:var(--ink-dim);text-align:center;cursor:pointer;
 }
+.area-row.sel .tag{color:var(--amber)}
+.area-row.sel input{border-color:var(--amber)}
 .area-row input{padding:.34rem .3rem;font-size:.82rem;text-align:center}
 .area-head{
   display:grid;grid-template-columns:20px repeat(4,1fr) 24px;gap:.3rem;
@@ -174,13 +205,13 @@ input[type=checkbox]{accent-color:var(--amber);width:1rem;height:1rem;margin:0}
 
 /* ---------- direction + corner pickers ---------- */
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
-.seg button{
+.seg button,.corner-grid button{
   display:flex;flex-direction:column;align-items:center;gap:.35rem;
   background:var(--panel-2);border:1px solid var(--edge);border-radius:var(--r-md);
   padding:.5rem .3rem;cursor:pointer;font-size:.76rem;color:var(--ink-dim);
 }
-.seg button svg{display:block}
-.seg button[aria-pressed=true]{border-color:var(--amber);color:var(--ink);background:#3a4a41}
+.seg button svg,.corner-grid button svg{display:block}
+.seg button[aria-pressed=true],.corner-grid button[aria-pressed=true]{border-color:var(--amber);color:var(--ink);background:var(--pressed)}
 .corner-grid{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
 
 /* ---------- drawing ---------- */
@@ -189,12 +220,69 @@ input[type=checkbox]{accent-color:var(--amber);width:1rem;height:1rem;margin:0}
   background:var(--mat-2);
   border:1px solid var(--edge);
   border-radius:var(--r-md);
-  padding:.8rem;
+  padding:.55rem .8rem .8rem;
   box-shadow:var(--shadow);
 }
-#plan{width:100%;height:auto;display:block;touch-action:manipulation}
-#plan rect.piece{cursor:crosshair}
+
+/* The stage is sized by the viewport rather than by the room, so zooming
+   never reflows the page and the viewBox can be built to the stage's own
+   aspect ratio. On the two-pane layout it takes nearly the whole screen,
+   leaving just enough of the results showing to say there is more below. */
+.plan-stage{
+  position:relative;
+  height:clamp(280px, 56vh, 560px);
+  touch-action:none;          /* the pointer handlers own every gesture here */
+  overscroll-behavior:contain;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+}
+@media (min-width:760px){
+  .plan-stage{height:calc(100dvh - 248px);min-height:300px;max-height:none}
+}
+#plan{width:100%;height:100%;display:block;cursor:default}
 #plan rect.piece:hover{filter:brightness(1.18)}
+/* Decoration must never intercept the pointer: hit testing is done in JS
+   against the room itself, so the plank tooltips keep working underneath. */
+#plan line,#plan text,#plan g.edit{pointer-events:none}
+
+.plan-tools{
+  display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;
+  margin-bottom:.5rem;
+}
+.tool-group{display:flex;align-items:center;gap:.25rem}
+.tool-group.gap{margin-left:auto}
+.tbtn{
+  display:inline-flex;align-items:center;gap:.35rem;
+  background:var(--panel);border:1px solid var(--edge);color:var(--ink-dim);
+  padding:.3rem .5rem;border-radius:var(--r-sm);cursor:pointer;
+  font-size:.8rem;line-height:1;
+}
+.tbtn:hover{border-color:var(--amber);color:var(--amber)}
+.tbtn[aria-pressed=true]{border-color:var(--amber);color:var(--ink);background:var(--pressed)}
+.tbtn:disabled{opacity:.4;cursor:default}
+.tbtn:disabled:hover{border-color:var(--edge);color:var(--ink-dim)}
+.tbtn svg{display:block}
+.tbtn.wide{min-width:2.1rem;justify-content:center}
+.zoom-pct{
+  font-family:"IBM Plex Mono",monospace;font-size:.75rem;color:var(--ink-dim);
+  min-width:3.2rem;text-align:right;
+}
+
+/* Live readout while dragging, and the standing hint when nothing is
+   happening. It sits under the drawing rather than floating over it: the
+   plan is nearly full height now, so anything floating covers floor. */
+.hud{
+  margin-left:auto;text-align:right;
+  font-family:"IBM Plex Mono",monospace;font-size:.75rem;color:var(--ink-dim);
+}
+.hud b{color:var(--amber);font-weight:500}
+
+/* Typing a dimension straight onto the plan. */
+.dim-edit{
+  position:absolute;width:6.2rem;padding:.18rem .3rem;z-index:6;
+  background:var(--panel-2);border:1px solid var(--amber);border-radius:var(--r-sm);
+  font-family:"IBM Plex Mono",monospace;font-size:.8rem;text-align:center;
+}
+.dim-edit[hidden]{display:none}
 
 .tip{
   position:absolute;pointer-events:none;opacity:0;transition:opacity .12s;
@@ -245,6 +333,44 @@ td.row-no{color:var(--ink-dim);width:3rem}
 
 .foot{margin-top:1.4rem;font-size:.78rem;color:var(--ink-dim);max-width:64ch}
 .foot a{color:var(--amber)}
+/* A narrower panel has to find the space for four figures per area
+   somewhere, and the spin buttons are the least of them — nobody steps a
+   room dimension one click at a time, and on a touch screen they are far
+   too small to hit anyway. */
+@media (min-width:760px) and (max-width:1059px){
+  .area-row,.area-head{grid-template-columns:16px repeat(4,1fr) 20px;gap:.22rem}
+  .area-row input{padding:.34rem .12rem;font-size:.78rem}
+}
+@media (min-width:760px) and (max-width:1059px), (pointer:coarse){
+  .area-row input::-webkit-inner-spin-button,
+  .area-row input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+}
+
+/* ---------- touch ----------
+   A finger is about 9 mm across and has no hover to aim with, so on a
+   touch screen every target grows. The drawn handles and the hit radius
+   in the script grow with it. */
+@media (pointer:coarse){
+  .tbtn{padding:.55rem .75rem;font-size:.86rem}
+  .tbtn.wide{min-width:2.9rem;font-size:1rem}
+  .plan-tools{gap:.6rem}
+  .btn{padding:.55rem .8rem}
+  .tools .btn{padding:.5rem .75rem;font-size:.86rem}
+  .presets .btn{padding:.45rem .7rem;font-size:.82rem}
+  input[type=number],input[type=text],select{padding:.58rem .55rem}
+  .area-row input{padding:.55rem .25rem}
+  .area-row .tag{padding:.3rem 0}
+  .x-btn{padding:.45rem .3rem;font-size:1.15rem}
+  .seg button,.corner-grid button{padding:.8rem .3rem}
+  .check{padding:.25rem 0}
+  input[type=checkbox]{width:1.25rem;height:1.25rem}
+  .dim-edit{width:7.5rem;padding:.45rem .3rem;font-size:1rem}
+  .hud{font-size:.78rem;padding:.35rem .55rem}
+  details.cuts > summary{padding:.8rem}
+  /* Hover styling sticks after a tap on a touch screen, so drop it. */
+  .btn:hover,.tbtn:hover{border-color:var(--edge-2);color:var(--ink)}
+  #plan rect.piece:hover{filter:none}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -388,14 +514,40 @@ td.row-no{color:var(--ink-dim);width:3rem}
   <!-- ================= WORK AREA ================= -->
   <main class="work">
     <div class="plan-wrap">
-      <svg id="plan" xmlns="http://www.w3.org/2000/svg"></svg>
-      <div class="tip" id="tip"></div>
+      <div class="plan-tools">
+        <div class="tool-group" role="group" aria-label="Plan tool">
+          <button class="tbtn" id="tool-select" aria-pressed="true"
+                  title="Move and resize areas — V">
+            <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+              <path d="M3 1.5 12.5 8 8.3 9 6.6 13.4z"/></svg>Move</button>
+          <button class="tbtn" id="tool-draw" aria-pressed="false"
+                  title="Drag out a new area — D">
+            <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"
+                 fill="none" stroke="currentColor" stroke-width="1.6">
+              <rect x="2.5" y="2.5" width="11" height="11" stroke-dasharray="3 2"/></svg>Draw</button>
+        </div>
+        <div class="tool-group gap" role="group" aria-label="Zoom">
+          <button class="tbtn wide" id="zoom-out" title="Zoom out — minus key">−</button>
+          <button class="tbtn wide" id="zoom-in"  title="Zoom in — plus key">+</button>
+          <button class="tbtn" id="zoom-fit" title="Fit the whole room in the view — 0">Fit</button>
+          <span class="zoom-pct" id="zoom-pct">100%</span>
+        </div>
+        <div class="tool-group">
+          <button class="tbtn" id="del-area" title="Delete the selected area — Delete">Delete</button>
+        </div>
+      </div>
+      <div class="plan-stage" id="plan-stage">
+        <svg id="plan" xmlns="http://www.w3.org/2000/svg"></svg>
+        <input class="dim-edit" id="dim-edit" type="number" step="10" hidden
+               aria-label="Edit dimension">
+        <div class="tip" id="tip"></div>
+      </div>
     </div>
     <div class="legend">
       <span><i style="background:var(--oak)"></i>Full plank</span>
       <span><i style="background:var(--oak-cut)"></i>Cut from a new plank</span>
       <span><i style="background:var(--sage);border-color:#5e8a68"></i>Cut from a saved offcut</span>
-      <span id="hover-hint">Hover or tap a piece for its size</span>
+      <span class="hud" id="hud"></span>
     </div>
 
     <div class="results" id="results"></div>
@@ -642,6 +794,67 @@ function clipToRect(poly, rect){
     }
   }
   return out.length >= 3 ? out : [];
+}
+
+/* ---------- snapping, for dragging on the plan -------------------
+   Dragging a rectangle should feel like it clicks onto its neighbours,
+   so every edge of every other rectangle is a place it can line up
+   with. The tolerance comes in from the view in room units, worked out
+   from a fixed number of screen pixels, so a snap feels the same
+   distance under the finger at any zoom.
+   ---------------------------------------------------------------- */
+
+/** Both edges of every rectangle, on each axis, except the one being moved. */
+function snapCandidates(rects, skip){
+  const xs = [], ys = [];
+  rects.forEach((r,i) => {
+    if(i === skip) return;
+    xs.push(r.x, r.x + r.w);
+    ys.push(r.y, r.y + r.h);
+  });
+  return {xs, ys};
+}
+
+/**
+ * Snap one coordinate. A neighbouring edge always beats the grid, because
+ * meeting the wall next door matters more than landing on a round number.
+ * Returns the value and the edge it caught, so a guide can be drawn.
+ */
+function snapOne(v, cands, tol, grid){
+  let best = null, bestD = tol;
+  for(const c of cands){
+    const d = Math.abs(c - v);
+    if(d < bestD - EPS){ bestD = d; best = c; }
+  }
+  if(best !== null) return {v: best, at: best};
+  return {v: grid > 0 ? Math.round(v/grid)*grid : v, at: null};
+}
+
+/**
+ * Snap a rectangle that is being moved as a whole. Either edge of it may
+ * catch, so both are offered on each axis and the nearer one wins; its
+ * size never changes, only where it sits.
+ */
+function snapMoved(rect, cands, tol, grid){
+  const axis = (lo, len, list) => {
+    const near = snapOne(lo, list, tol, grid);
+    const far  = snapOne(lo + len, list, tol, grid);
+    const dn = Math.abs(near.v - lo), df = Math.abs(far.v - (lo + len));
+    if(near.at !== null && (far.at === null || dn <= df)) return {v:near.v, at:near.at};
+    if(far.at !== null) return {v:far.v - len, at:far.at};
+    return {v:near.v, at:null};      // nothing caught, so both fell back to the grid
+  };
+  const x = axis(rect.x, rect.w, cands.xs);
+  const y = axis(rect.y, rect.h, cands.ys);
+  return {x:x.v, y:y.v, w:rect.w, h:rect.h, gx:x.at, gy:y.at};
+}
+
+/** The rectangle between two dragged corners, whichever way round they went. */
+function normRect(a, b){
+  return {
+    x: Math.min(a.x, b.x), y: Math.min(a.y, b.y),
+    w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y)
+  };
 }
 
 /* ---------- coordinate transform -------------------------------
@@ -953,17 +1166,122 @@ const fromDisplay = v => state.units === "m" ? v*1000 : v;
    RENDERING
    ================================================================ */
 
+/* ================================================================
+   THE PLAN VIEW
+   The drawing is a camera on the room rather than a fixed picture of
+   it. `view` holds where that camera points (cx, cy in room
+   coordinates) and how far back it sits: `upp` is room units per
+   screen pixel, so a smaller upp is further in.
+
+   Everything that is furniture rather than floor — labels, handles,
+   dimension lines — is sized through px(), which turns screen pixels
+   into room units at the current zoom. That keeps it all the same size
+   on screen however far in you go, which is the whole point of being
+   able to zoom in the first place.
+
+   The view is deliberately not part of a saved plan: it is where you
+   happen to be looking, not something about the floor.
+   ================================================================ */
+const view = { cx:0, cy:0, upp:1, fitUpp:1, auto:true };
+// The dimension lines hang off the left and top of the room, so fitting
+// leaves a gutter on those two sides and only breathing space on the other
+// two. Symmetric margins either crop the figures or waste half the stage.
+const FIT_GUTTER = 64;        // screen px for the dimension lines and their labels
+const FIT_PAD    = 20;        // screen px of plain margin on the other two sides
+
+function stageBox(){
+  const b = document.getElementById("plan").getBoundingClientRect();
+  // Before the first layout the box is empty. Anything sane will do — the
+  // resize observer redraws it properly a moment later.
+  return { left:b.left, top:b.top, w:b.width || 640, h:b.height || 420 };
+}
+
+/** Point the camera at the whole room, leaving space for the dimensions. */
+function fitToRoom(){
+  const bb = state.rects.length ? bboxOf(state.rects) : {x:0, y:0, w:4000, h:3000};
+  const box = stageBox();
+  const spare = FIT_GUTTER + FIT_PAD;
+  view.fitUpp = Math.max(bb.w/Math.max(80, box.w - spare),
+                         bb.h/Math.max(80, box.h - spare), 1e-4);
+  view.upp = view.fitUpp;
+  // Nudge the camera so the extra space lands on the two sides that need it.
+  const shift = (FIT_GUTTER - FIT_PAD)/2 * view.upp;
+  view.cx = bb.x + bb.w/2 - shift;
+  view.cy = bb.y + bb.h/2 - shift;
+  view.auto = true;
+}
+
+/** How far in and out the camera may go. In stops the view spanning less
+    than a plank width; out stops the room shrinking to a speck. */
+function zoomLimits(){
+  const lo = 150/stageBox().w;
+  return { lo, hi: Math.max(view.fitUpp*8, lo) };
+}
+
+/** Zoom, keeping whatever sits at `anchor` (room coordinates) still. */
+function zoomTo(upp, anchor){
+  const lim = zoomLimits();
+  const next = Math.min(lim.hi, Math.max(lim.lo, upp));
+  if(Math.abs(next - view.upp) < 1e-12) return;
+  if(anchor){
+    const k = next/view.upp;
+    view.cx = anchor.x + (view.cx - anchor.x)*k;
+    view.cy = anchor.y + (view.cy - anchor.y)*k;
+  }
+  view.upp = next;
+  view.auto = false;
+  scheduleDraw();
+}
+
+/** The viewBox is built to the stage's aspect ratio, not the room's, so
+    zooming never reflows the page and panning stays predictable. */
+function applyViewBox(svg){
+  const box = stageBox();
+  const w = box.w*view.upp, h = box.h*view.upp;
+  svg.setAttribute("viewBox", `${view.cx - w/2} ${view.cy - h/2} ${w} ${h}`);
+  svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+}
+
+function toWorld(clientX, clientY){
+  const b = stageBox();
+  return { x: view.cx + (clientX - b.left - b.w/2)*view.upp,
+           y: view.cy + (clientY - b.top  - b.h/2)*view.upp };
+}
+function toScreen(x, y){
+  const b = stageBox();
+  return { x: b.left + b.w/2 + (x - view.cx)/view.upp,
+           y: b.top  + b.h/2 + (y - view.cy)/view.upp };
+}
+/** What the camera can currently see, in room coordinates. */
+function viewRect(){
+  const b = stageBox();
+  return { x: view.cx - b.w*view.upp/2, y: view.cy - b.h*view.upp/2,
+           w: b.w*view.upp, h: b.h*view.upp };
+}
+/** Refit if a rectangle has landed somewhere the user cannot see. */
+function ensureVisible(r){
+  const v = viewRect();
+  if(r.x < v.x || r.y < v.y || r.x + r.w > v.x + v.w || r.y + r.h > v.y + v.h) view.auto = true;
+}
+
 /* ---- the plan drawing ---- */
-function drawPlan(L){
+const HANDLES = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
+let chipHits = [];            // the on-plan dimension chips, in room coordinates
+
+const letter   = i => String.fromCharCode(65 + i);
+const lenLabel = v => state.units === "m" ? (v/1000).toFixed(2) + " m" : mm(v);
+
+function drawPlan(L, opts){
   const svg = document.getElementById("plan");
   svg.innerHTML = "";
-  if(!L || L.overflow){ svg.setAttribute("viewBox","0 0 100 60"); return; }
+  chipHits = [];
+  const quick = !!(opts && opts.quick);
+  if(!state.rects.length){ svg.setAttribute("viewBox", "0 0 100 60"); return; }
 
-  const bbReal = bboxOf(state.rects);
-  const pad    = Math.max(bbReal.w, bbReal.h) * 0.12 + 150;
-  svg.setAttribute("viewBox",
-    `${bbReal.x-pad} ${bbReal.y-pad} ${bbReal.w+pad*2} ${bbReal.h+pad*2}`);
-  svg.setAttribute("preserveAspectRatio","xMidYMid meet");
+  if(view.auto) fitToRoom();
+  applyViewBox(svg);
+  document.getElementById("zoom-pct").textContent =
+    Math.round(view.fitUpp/view.upp*100) + "%";
 
   const NS = "http://www.w3.org/2000/svg";
   const el = (tag, attrs, parent) => {
@@ -972,98 +1290,40 @@ function drawPlan(L){
     (parent || svg).appendChild(n);
     return n;
   };
-  const unit = Math.max(bbReal.w, bbReal.h);
-  const fs   = unit/55;                       // label size in drawing units
+  const px = v => v*view.upp;                 // screen pixels -> room units
+  const fs = px(COARSE ? 14 : 12);
+  const bbReal = bboxOf(state.rects);
 
   // Clip everything to the true floor outline so planks stop at the walls.
-  const defs = el("defs",{});
-  const clip = el("clipPath",{id:"floor"},defs);
-  state.rects.forEach(r => el("rect",{x:r.x,y:r.y,width:r.w,height:r.h},clip));
+  const defs = el("defs", {});
+  const clip = el("clipPath", {id:"floor"}, defs);
+  state.rects.forEach(r => el("rect", {x:r.x, y:r.y, width:r.w, height:r.h}, clip));
 
   // Floor slab under the planks.
-  const slab = el("g",{});
-  state.rects.forEach((r,i) => el("rect",{
+  const slab = el("g", {});
+  state.rects.forEach((r,i) => el("rect", {
     x:r.x, y:r.y, width:r.w, height:r.h,
-    fill: state.focusRect === i ? "#3d5045" : "#31403a"
+    fill: state.focusRect === i ? "var(--slab-lit)" : "var(--slab)"
   }, slab));
 
-  // Planks. The clip lives on an untransformed group so the herringbone
-  // rotation underneath it cannot drag the room outline around with it.
-  const layer = el("g",{"clip-path":"url(#floor)"});
-  const seed  = (n) => { const s = Math.sin(n*12.9898)*43758.5453; return s - Math.floor(s); };
-
-  if(L.mode === "herringbone"){
-    // Every plank is placed in pattern space, so one group transform
-    // puts the whole lattice on the floor at the right angle.
-    const field = el("g",
-      {transform:`translate(${L.anchor.ax} ${L.anchor.ay}) rotate(${L.deg})`}, layer);
-    L.pieces.forEach((p,i) => {
-      const r = p.rot;
-      const node = el("rect",{
-        class:"piece", x:r.x, y:r.y, width:r.w, height:r.h,
-        fill: p.full ? "var(--oak)" : (p.source === "offcut" ? "var(--sage)" : "var(--oak-cut)"),
-        stroke:"var(--oak-edge)", "stroke-width":1, "vector-effect":"non-scaling-stroke"
-      }, field);
-      node.dataset.info = p.full
-        ? `${mm(state.plankL)} × ${mm(state.plankW)} mm · full plank`
-        : `border piece · ${(p.area/1e6).toFixed(3)} m² · ` +
-          (p.source === "offcut" ? "from an offcut" : "cut from a new plank");
-
-      if(Math.max(r.w,r.h) > unit/22){
-        for(let g=1;g<=2;g++){
-          const t = 0.28 + 0.44*seed(i*3+g);
-          const along = r.w >= r.h;
-          el("line", along
-            ? {x1:r.x+r.w*0.05, y1:r.y+r.h*t, x2:r.x+r.w*0.95, y2:r.y+r.h*t}
-            : {x1:r.x+r.w*t, y1:r.y+r.h*0.05, x2:r.x+r.w*t, y2:r.y+r.h*0.95},
-            field).setAttribute("style",
-              "stroke:rgba(90,60,25,.20);stroke-width:1;vector-effect:non-scaling-stroke");
-        }
-      }
-    });
-  } else {
-  L.pieces.forEach((p,i) => {
-    const r = L.T.toReal(p);
-    const fill = p.full ? "var(--oak)" : (p.source === "offcut" ? "var(--sage)" : "var(--oak-cut)");
-    const node = el("rect",{
-      class:"piece", x:r.x, y:r.y, width:r.w, height:r.h,
-      fill, stroke:"var(--oak-edge)", "stroke-width":1,
-      "vector-effect":"non-scaling-stroke"
-    }, layer);
-    node.dataset.info =
-      `${mm(p.w)} × ${mm(Math.min(p.h, state.plankW))} mm · row ${p.row+1} · ` +
-      (p.full ? "full plank" : p.source === "offcut" ? "from offcut" : "cut plank");
-
-    // Two faint grain lines. Cheap, and it reads as timber rather than tiles.
-    const longSide = state.dir === "h" ? r.w : r.h;
-    if(longSide > unit/22){
-      for(let g=1;g<=2;g++){
-        const t = 0.28 + 0.44*seed(i*3+g);
-        if(state.dir === "h")
-          el("line",{x1:r.x+r.w*0.04, y1:r.y+r.h*t, x2:r.x+r.w*0.96, y2:r.y+r.h*t,
-            stroke:"rgba(90,60,25,.20)", "stroke-width":1, "vector-effect":"non-scaling-stroke"}, layer);
-        else
-          el("line",{x1:r.x+r.w*t, y1:r.y+r.h*0.04, x2:r.x+r.w*t, y2:r.y+r.h*0.96,
-            stroke:"rgba(90,60,25,.20)", "stroke-width":1, "vector-effect":"non-scaling-stroke"}, layer);
-      }
-    }
-  });
-  }
+  // A room too big to lay still draws its shape, so it can be dragged back
+  // to a sensible size rather than leaving the user staring at nothing.
+  if(L && !L.overflow) drawPieces(L, el, px, quick);
 
   // Wall outline.
-  state.rects.forEach(r => el("rect",{
+  state.rects.forEach(r => el("rect", {
     x:r.x, y:r.y, width:r.w, height:r.h, fill:"none",
     stroke:"var(--ink)", "stroke-width":2, "vector-effect":"non-scaling-stroke",
     "stroke-linejoin":"miter", opacity:.85
   }));
 
   // Overall dimensions, drawn like a set-out drawing.
-  const dimOff = pad*0.45;
+  const dimOff = px(16);
   const dim = (x1,y1,x2,y2,label,anchor,dx,dy) => {
-    el("line",{x1,y1,x2,y2,stroke:"var(--ink-dim)","stroke-width":1,
-      "vector-effect":"non-scaling-stroke","stroke-dasharray":"6 4"});
-    const t = el("text",{
-      x:(x1+x2)/2+dx, y:(y1+y2)/2+dy, fill:"var(--ink-dim)",
+    el("line", {x1, y1, x2, y2, stroke:"var(--ink-dim)", "stroke-width":1,
+      "vector-effect":"non-scaling-stroke", "stroke-dasharray":"6 4"});
+    const t = el("text", {
+      x:(x1+x2)/2 + dx, y:(y1+y2)/2 + dy, fill:"var(--ink-dim)",
       "font-size":fs, "font-family":"IBM Plex Mono, monospace",
       "text-anchor":anchor, "dominant-baseline":"middle"
     });
@@ -1075,27 +1335,561 @@ function drawPlan(L){
   // Starting-corner marker: an amber tick on the corner that gets a full plank.
   const cx = (state.corner === "tr" || state.corner === "br") ? bbReal.x+bbReal.w : bbReal.x;
   const cy = (state.corner === "bl" || state.corner === "br") ? bbReal.y+bbReal.h : bbReal.y;
-  el("circle",{cx, cy, r:unit/95, fill:"var(--amber)", stroke:"var(--mat-2)",
+  el("circle", {cx, cy, r:px(6), fill:"var(--amber)", stroke:"var(--mat-2)",
     "stroke-width":2, "vector-effect":"non-scaling-stroke"});
+
+  drawEditLayer(el, px, fs, bbReal);
 }
 
-/* ---- tooltip on the drawing ---- */
-(function bindTip(){
-  const wrap = document.querySelector(".plan-wrap");
-  const tip  = document.getElementById("tip");
-  const show = (e) => {
+/** The planks: staggered rows, or the herringbone lattice. */
+function drawPieces(L, el, px, quick){
+  // The clip lives on an untransformed group so the herringbone rotation
+  // underneath it cannot drag the room outline around with it.
+  const layer = el("g", {"clip-path":"url(#floor)"});
+  const seed  = (n) => { const s = Math.sin(n*12.9898)*43758.5453; return s - Math.floor(s); };
+  // Grain is drawn once a plank is big enough on screen to read as timber,
+  // and dropped altogether while a busy floor is being dragged about.
+  const grain = !(quick && L.pieces.length > 1200);
+  const minGrain = px(26);
+  const grainStyle = "stroke:var(--grain);stroke-width:1;vector-effect:non-scaling-stroke";
+
+  if(L.mode === "herringbone"){
+    // Every plank is placed in pattern space, so one group transform puts
+    // the whole lattice on the floor at the right angle.
+    const field = el("g",
+      {transform:`translate(${L.anchor.ax} ${L.anchor.ay}) rotate(${L.deg})`}, layer);
+    L.pieces.forEach((p,i) => {
+      const r = p.rot;
+      const node = el("rect", {
+        class:"piece", x:r.x, y:r.y, width:r.w, height:r.h,
+        fill: p.full ? "var(--oak)" : (p.source === "offcut" ? "var(--sage)" : "var(--oak-cut)"),
+        stroke:"var(--oak-edge)", "stroke-width":1, "vector-effect":"non-scaling-stroke"
+      }, field);
+      node.dataset.info = p.full
+        ? `${mm(state.plankL)} × ${mm(state.plankW)} mm · full plank`
+        : `border piece · ${(p.area/1e6).toFixed(3)} m² · ` +
+          (p.source === "offcut" ? "from an offcut" : "cut from a new plank");
+
+      if(grain && Math.max(r.w,r.h) > minGrain){
+        for(let g=1;g<=2;g++){
+          const t = 0.28 + 0.44*seed(i*3+g);
+          el("line", r.w >= r.h
+            ? {x1:r.x+r.w*0.05, y1:r.y+r.h*t, x2:r.x+r.w*0.95, y2:r.y+r.h*t}
+            : {x1:r.x+r.w*t, y1:r.y+r.h*0.05, x2:r.x+r.w*t, y2:r.y+r.h*0.95},
+            field).setAttribute("style", grainStyle);
+        }
+      }
+    });
+    return;
+  }
+
+  L.pieces.forEach((p,i) => {
+    const r = L.T.toReal(p);
+    const node = el("rect", {
+      class:"piece", x:r.x, y:r.y, width:r.w, height:r.h,
+      fill: p.full ? "var(--oak)" : (p.source === "offcut" ? "var(--sage)" : "var(--oak-cut)"),
+      stroke:"var(--oak-edge)", "stroke-width":1, "vector-effect":"non-scaling-stroke"
+    }, layer);
+    node.dataset.info =
+      `${mm(p.w)} × ${mm(Math.min(p.h, state.plankW))} mm · row ${p.row+1} · ` +
+      (p.full ? "full plank" : p.source === "offcut" ? "from offcut" : "cut plank");
+
+    // Two faint grain lines. Cheap, and it reads as timber rather than tiles.
+    if(grain && (state.dir === "h" ? r.w : r.h) > minGrain){
+      for(let g=1;g<=2;g++){
+        const t = 0.28 + 0.44*seed(i*3+g);
+        el("line", state.dir === "h"
+          ? {x1:r.x+r.w*0.04, y1:r.y+r.h*t, x2:r.x+r.w*0.96, y2:r.y+r.h*t}
+          : {x1:r.x+r.w*t, y1:r.y+r.h*0.04, x2:r.x+r.w*t, y2:r.y+r.h*0.96},
+          layer).setAttribute("style", grainStyle);
+      }
+    }
+  });
+}
+
+/* ---- the editing overlay ----
+   Drawn last, over the planks, and given no pointer events at all: hit
+   testing is done in JS against `state.rects` instead, which leaves the
+   plank tooltips working underneath it. */
+function drawEditLayer(el, px, fs, bb){
+  const g = el("g", {class:"edit"});
+  const sel = state.rects[state.focusRect];
+
+  // Guides, while a drag is holding a line.
+  if(drag && drag.guide){
+    const reach = Math.max(bb.w, bb.h) + px(600);
+    const guide = (x1,y1,x2,y2) => el("line", {x1, y1, x2, y2,
+      stroke:"var(--guide)", "stroke-width":1, "stroke-dasharray":"5 5",
+      "vector-effect":"non-scaling-stroke", opacity:.9}, g);
+    if(drag.guide.gx !== null && drag.guide.gx !== undefined)
+      guide(drag.guide.gx, bb.y - reach, drag.guide.gx, bb.y + bb.h + reach);
+    if(drag.guide.gy !== null && drag.guide.gy !== undefined)
+      guide(bb.x - reach, drag.guide.gy, bb.x + bb.w + reach, drag.guide.gy);
+  }
+
+  // The rectangle being drawn out.
+  if(drag && drag.mode === "draw" && drag.ghost){
+    const r = drag.ghost;
+    el("rect", {x:r.x, y:r.y, width:r.w, height:r.h, fill:"var(--amber)",
+      "fill-opacity":.16, stroke:"var(--amber)", "stroke-width":1.5,
+      "stroke-dasharray":"7 5", "vector-effect":"non-scaling-stroke"}, g);
+  }
+
+  // Every area is lettered, so the plan and the panel are visibly one list.
+  state.rects.forEach((r,i) => {
+    if(Math.min(r.w, r.h) < px(22)) return;
+    const t = el("text", {
+      x:r.x + r.w/2, y:r.y + r.h/2, "font-size":fs*1.4,
+      "font-family":"Bricolage Grotesque, sans-serif", "font-weight":800,
+      fill: i === state.focusRect ? "var(--amber)" : "var(--ink)",
+      opacity: i === state.focusRect ? .95 : .5,
+      "text-anchor":"middle", "dominant-baseline":"central",
+      // Outlined, or it disappears into the grain of the planks underneath.
+      style:"paint-order:stroke;stroke:var(--mat-2);stroke-width:3;" +
+            "stroke-linejoin:round;vector-effect:non-scaling-stroke"
+    }, g);
+    t.textContent = letter(i);
+  });
+
+  if(!sel) return;
+
+  el("rect", {x:sel.x, y:sel.y, width:sel.w, height:sel.h, fill:"none",
+    stroke:"var(--amber)", "stroke-width":2, "vector-effect":"non-scaling-stroke"}, g);
+
+  const h = px(COARSE ? 7 : 4.5);
+  for(const [hx,hy] of HANDLES){
+    el("rect", {
+      x: sel.x + (hx+1)/2*sel.w - h, y: sel.y + (hy+1)/2*sel.h - h,
+      width:h*2, height:h*2, rx:px(1.5),
+      fill:"var(--amber)", stroke:"var(--mat-2)", "stroke-width":1,
+      "vector-effect":"non-scaling-stroke"
+    }, g);
+  }
+
+  // The two dimensions, as chips you can click and type into. Their boxes
+  // are kept for hit testing, since the overlay itself takes no events.
+  const chip = (label, key, ax, ay, alignX, alignY) => {
+    const w = label.length*fs*0.62 + px(COARSE ? 22 : 12), ht = fs*(COARSE ? 2.1 : 1.7);
+    const box = {
+      x: ax - (alignX === "end" ? w : alignX === "mid" ? w/2 : 0),
+      y: ay - (alignY === "end" ? ht : alignY === "mid" ? ht/2 : 0),
+      w, h:ht, i:state.focusRect, k:key
+    };
+    el("rect", {x:box.x, y:box.y, width:w, height:ht, rx:px(3),
+      fill:"var(--panel-2)", stroke:"var(--amber)", "stroke-width":1,
+      "vector-effect":"non-scaling-stroke"}, g);
+    const t = el("text", {x:box.x + w/2, y:box.y + ht/2, fill:"var(--ink)",
+      "font-size":fs, "font-family":"IBM Plex Mono, monospace",
+      "text-anchor":"middle", "dominant-baseline":"central"}, g);
+    t.textContent = label;
+    chipHits.push(box);
+  };
+  chip(lenLabel(sel.w), "w", sel.x + sel.w/2, sel.y - px(9), "mid", "end");
+  chip(lenLabel(sel.h), "h", sel.x - px(9), sel.y + sel.h/2, "end", "mid");
+}
+
+/* ================================================================
+   EDITING ON THE PLAN
+   Pointers are handled here rather than through SVG event targets, so
+   that the overlay can sit on top of the planks without stealing their
+   tooltips: every gesture starts with a hit test in room coordinates.
+   ================================================================ */
+// A finger is far less precise than a pointer, and has no hover to aim
+// with first, so everything it has to hit is drawn and tested larger.
+const COARSE = typeof matchMedia === "function" && matchMedia("(pointer:coarse)").matches;
+
+const GRID     = 10;                  // mm; what a free drag rounds to
+const SNAP_PX  = COARSE ? 13 : 9;     // how close an edge comes before it catches
+const HIT_PX   = COARSE ? 22 : 10;    // grab radius for the resize handles
+const MIN_SIDE = 50;                  // mm; the smallest area that can be dragged out
+
+let tool = "select";
+let drag = null;
+let editing = null;
+const pointers = new Map();
+let pinch = null;
+
+const tidy  = v => Math.round(v*1000)/1000;
+const inBox = (b,p) => p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
+
+function handleUnder(r, p, tol){
+  for(const [hx,hy] of HANDLES){
+    if(Math.abs(p.x - (r.x + (hx+1)/2*r.w)) <= tol &&
+       Math.abs(p.y - (r.y + (hy+1)/2*r.h)) <= tol) return {hx, hy};
+  }
+  return null;
+}
+
+/** What is under the pointer. The selected area is tested first, so its
+    handles and chips stay reachable even where another area overlaps it. */
+function hitTest(p){
+  const tol = HIT_PX*view.upp;
+  const sel = state.rects[state.focusRect];
+  if(sel){
+    for(const c of chipHits) if(inBox(c, p)) return {kind:"chip", i:c.i, k:c.k};
+    const h = handleUnder(sel, p, tol);
+    if(h) return {kind:"resize", i:state.focusRect, hx:h.hx, hy:h.hy};
+    if(inBox(sel, p)) return {kind:"move", i:state.focusRect};
+  }
+  for(let i=state.rects.length-1;i>=0;i--)
+    if(inBox(state.rects[i], p)) return {kind:"move", i};
+  return {kind:"pan"};
+}
+
+function cursorFor(hit){
+  if(tool === "draw") return "crosshair";
+  if(hit.kind === "chip") return "text";
+  if(hit.kind === "move") return "move";
+  if(hit.kind === "resize"){
+    if(hit.hx === 0) return "ns-resize";
+    if(hit.hy === 0) return "ew-resize";
+    return hit.hx === hit.hy ? "nwse-resize" : "nesw-resize";
+  }
+  return "grab";
+}
+
+function select(i){
+  if(state.focusRect === i) return;
+  state.focusRect = i;
+  markAreaRows();
+  scheduleDraw();
+}
+
+/* Redrawing is throttled to one frame. Panning and zooming leave the
+   layout alone, so the planks are only recomputed when the room itself
+   has actually moved. */
+let pending = 0, roomMoved = false;
+function scheduleDraw(changedRoom){
+  roomMoved = roomMoved || !!changedRoom;
+  if(pending) return;
+  pending = requestAnimationFrame(() => {
+    pending = 0;
+    if(roomMoved){ roomMoved = false; lastLayout = computeLayout(state); }
+    if(drag && drag.i !== undefined) syncAreaRow(drag.i);
+    drawPlan(lastLayout, {quick:true});
+    drawHud();
+  });
+}
+
+function drawHud(){
+  const box = document.getElementById("hud");
+  document.getElementById("del-area").disabled =
+    state.focusRect < 0 || state.rects.length < 2;
+
+  let html;
+  if(drag && drag.mode === "draw"){
+    const r = drag.ghost;
+    html = r ? `New area <b>${lenLabel(r.w)} × ${lenLabel(r.h)}</b>`
+             : "Drag out the new area";
+  } else if(drag && (drag.mode === "move" || drag.mode === "resize")){
+    const r = state.rects[drag.i];
+    html = `${letter(drag.i)} &nbsp;<b>${lenLabel(r.w)} × ${lenLabel(r.h)}</b>` +
+           ` &nbsp;at ${lenLabel(r.x)}, ${lenLabel(r.y)}`;
+  } else if(tool === "draw"){
+    html = "Drag out a rectangle to add an area";
+  } else if(state.rects[state.focusRect]){
+    html = `${letter(state.focusRect)} selected — drag to move, handles to resize,` +
+           " a figure to type it";
+  } else {
+    html = "Tap an area to select · drag the background to pan · scroll or pinch to zoom";
+  }
+  box.innerHTML = html;
+}
+
+/* ---- typing a dimension straight onto the plan ---- */
+function openDimEdit(i, key){
+  const chip = chipHits.find(c => c.i === i && c.k === key);
+  if(!chip) return;
+  const inp = document.getElementById("dim-edit");
+  const sb  = document.getElementById("plan-stage").getBoundingClientRect();
+  const mid = toScreen(chip.x + chip.w/2, chip.y + chip.h/2);
+  inp.hidden = false;                        // measurable only once shown
+  inp.step   = state.units === "m" ? 0.01 : 10;
+  inp.value  = toDisplay(state.rects[i][key]);
+  inp.style.left = (mid.x - sb.left - inp.offsetWidth/2) + "px";
+  inp.style.top  = (mid.y - sb.top  - inp.offsetHeight/2) + "px";
+  editing = {i, key};
+  inp.focus();
+  inp.select();
+}
+
+function closeDimEdit(commit){
+  if(!editing) return;
+  const inp = document.getElementById("dim-edit");
+  const {i, key} = editing;
+  editing = null;                            // before the blur fires back at us
+  inp.hidden = true;
+  const v = fromDisplay(parseFloat(inp.value));
+  if(commit && isFinite(v) && state.rects[i]){
+    state.rects[i][key] = tidy(Math.max(1, v));
+    drawAreas();
+  }
+  refresh();
+}
+
+/* ---- the gestures ---- */
+(function bindPlan(){
+  const stage = document.getElementById("plan-stage");
+  const svg   = document.getElementById("plan");
+  const tip   = document.getElementById("tip");
+
+  const snapTol = () => SNAP_PX*view.upp;
+
+  /* A lone point, for the corner a new area is drawn out from. */
+  const snapPoint = (p) => {
+    const c = snapCandidates(state.rects, -1);
+    return { x: snapOne(p.x, c.xs, snapTol(), GRID).v,
+             y: snapOne(p.y, c.ys, snapTol(), GRID).v };
+  };
+
+  function startPinch(){
+    // A second finger takes over: abandon whatever the first was doing.
+    if(drag && drag.start && drag.i !== undefined) state.rects[drag.i] = drag.start;
+    drag = null;
+    const [a,b] = [...pointers.values()];
+    pinch = { gap: Math.max(1, Math.hypot(a.x-b.x, a.y-b.y)), upp: view.upp,
+              world: toWorld((a.x+b.x)/2, (a.y+b.y)/2) };
+  }
+
+  function movePinch(){
+    const [a,b] = [...pointers.values()];
+    const gap = Math.max(1, Math.hypot(a.x-b.x, a.y-b.y));
+    const mid = {x:(a.x+b.x)/2, y:(a.y+b.y)/2};
+    const lim = zoomLimits();
+    view.upp = Math.min(lim.hi, Math.max(lim.lo, pinch.upp*pinch.gap/gap));
+    // Hold the point that was between the fingers where it started, which
+    // pans and zooms together in the one gesture.
+    const box = stageBox();
+    view.cx = pinch.world.x - (mid.x - box.left - box.w/2)*view.upp;
+    view.cy = pinch.world.y - (mid.y - box.top  - box.h/2)*view.upp;
+    view.auto = false;
+    scheduleDraw();
+  }
+
+  stage.addEventListener("pointerdown", e => {
+    if(e.pointerType === "mouse" && e.button !== 0 && e.button !== 1) return;
+    closeDimEdit(true);
+    pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pointers.size === 2){ startPinch(); return; }
+    if(pointers.size > 2) return;
+
+    // Capture keeps a drag alive when the pointer leaves the stage. Some
+    // pointers cannot be captured at all, which is not a reason to give up
+    // on the gesture.
+    try{ stage.setPointerCapture(e.pointerId); }catch(err){ /* carry on uncaptured */ }
+    tip.classList.remove("on");
+    const p = toWorld(e.clientX, e.clientY);
+    const panning = e.button === 1;
+
+    if(tool === "draw" && !panning){
+      drag = {mode:"draw", from:snapPoint(p), ghost:null, guide:null};
+      drawHud();
+      return;
+    }
+
+    const hit = panning ? {kind:"pan"} : hitTest(p);
+    if(hit.kind === "chip"){ openDimEdit(hit.i, hit.k); return; }
+
+    if(hit.kind === "resize"){
+      drag = {mode:"resize", i:hit.i, hx:hit.hx, hy:hit.hy, start:{...state.rects[hit.i]}};
+    } else if(hit.kind === "move"){
+      select(hit.i);
+      drag = {mode:"move", i:hit.i, start:{...state.rects[hit.i]},
+              grab:{x:p.x - state.rects[hit.i].x, y:p.y - state.rects[hit.i].y}};
+    } else {
+      if(!panning) select(-1);
+      drag = {mode:"pan", cx:view.cx, cy:view.cy, from:{x:e.clientX, y:e.clientY}};
+      svg.style.cursor = "grabbing";
+    }
+    drawHud();
+  });
+
+  stage.addEventListener("pointermove", e => {
+    if(pointers.has(e.pointerId)) pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if(pinch){ movePinch(); return; }
+
+    const p = toWorld(e.clientX, e.clientY);
+    if(!drag){
+      svg.style.cursor = cursorFor(hitTest(p));
+      return;
+    }
+
+    if(drag.mode === "pan"){
+      view.cx = drag.cx - (e.clientX - drag.from.x)*view.upp;
+      view.cy = drag.cy - (e.clientY - drag.from.y)*view.upp;
+      view.auto = false;
+      scheduleDraw();
+      return;
+    }
+
+    const cands = snapCandidates(state.rects, drag.i === undefined ? -1 : drag.i);
+    const tol = snapTol();
+
+    if(drag.mode === "move"){
+      const s = snapMoved({x:p.x - drag.grab.x, y:p.y - drag.grab.y,
+                           w:drag.start.w, h:drag.start.h}, cands, tol, GRID);
+      state.rects[drag.i] = {x:tidy(s.x), y:tidy(s.y), w:drag.start.w, h:drag.start.h};
+      drag.guide = {gx:s.gx, gy:s.gy};
+
+    } else if(drag.mode === "resize"){
+      const r = drag.start;
+      let x0 = r.x, x1 = r.x + r.w, y0 = r.y, y1 = r.y + r.h, gx = null, gy = null;
+      // Only the edges the grabbed handle owns move, and each stops a minimum
+      // side short of its opposite, so an area can never be turned inside out.
+      if(drag.hx){
+        const s = snapOne(p.x, cands.xs, tol, GRID);
+        if(drag.hx < 0){ x0 = Math.min(s.v, x1 - MIN_SIDE); if(x0 === s.v) gx = s.at; }
+        else           { x1 = Math.max(s.v, x0 + MIN_SIDE); if(x1 === s.v) gx = s.at; }
+      }
+      if(drag.hy){
+        const s = snapOne(p.y, cands.ys, tol, GRID);
+        if(drag.hy < 0){ y0 = Math.min(s.v, y1 - MIN_SIDE); if(y0 === s.v) gy = s.at; }
+        else           { y1 = Math.max(s.v, y0 + MIN_SIDE); if(y1 === s.v) gy = s.at; }
+      }
+      state.rects[drag.i] = {x:tidy(x0), y:tidy(y0), w:tidy(x1-x0), h:tidy(y1-y0)};
+      drag.guide = {gx, gy};
+
+    } else if(drag.mode === "draw"){
+      const sx = snapOne(p.x, cands.xs, tol, GRID);
+      const sy = snapOne(p.y, cands.ys, tol, GRID);
+      const g = normRect(drag.from, {x:sx.v, y:sy.v});
+      drag.ghost = {x:tidy(g.x), y:tidy(g.y), w:tidy(g.w), h:tidy(g.h)};
+      drag.guide = {gx:sx.at, gy:sy.at};
+    }
+    scheduleDraw(true);
+  });
+
+  function finish(e){
+    pointers.delete(e.pointerId);
+    if(pinch){
+      if(pointers.size < 2){ pinch = null; refresh(); }
+      return;
+    }
+    try{ if(stage.hasPointerCapture(e.pointerId)) stage.releasePointerCapture(e.pointerId); }
+    catch(err){ /* never captured in the first place */ }
+    if(!drag) return;
+    const d = drag;
+    drag = null;
+    svg.style.cursor = tool === "draw" ? "crosshair" : "default";
+
+    if(d.mode === "draw"){
+      const g = d.ghost;
+      setTool("select");
+      if(g && g.w >= MIN_SIDE && g.h >= MIN_SIDE){
+        state.rects.push(g);
+        state.focusRect = state.rects.length - 1;
+        drawAreas();
+        toast(`Added area ${letter(state.focusRect)} — ${lenLabel(g.w)} × ${lenLabel(g.h)}`);
+      } else {
+        toast("Drag out a rectangle to add an area.", true);
+      }
+    } else if(d.mode === "move" || d.mode === "resize"){
+      drawAreas();
+    }
+    refresh();
+  }
+  stage.addEventListener("pointerup", finish);
+  stage.addEventListener("pointercancel", finish);
+
+  stage.addEventListener("wheel", e => {
+    e.preventDefault();
+    // Line and page deltas are far coarser than pixel ones, so scale them.
+    const k = e.deltaMode === 1 ? 0.05 : e.deltaMode === 2 ? 0.5 : 0.0016;
+    zoomTo(view.upp*Math.exp(e.deltaY*k), toWorld(e.clientX, e.clientY));
+  }, {passive:false});
+
+  /* Hovering a plank still names its size: the overlay takes no pointer
+     events, so the piece underneath is what the event lands on. */
+  const showTip = (e) => {
     const t = e.target;
-    if(!(t instanceof SVGElement) || !t.dataset.info){ tip.classList.remove("on"); return; }
-    const b = wrap.getBoundingClientRect();
+    if(drag || !(t instanceof SVGElement) || !t.dataset.info){ tip.classList.remove("on"); return; }
+    const b = stage.getBoundingClientRect();
     tip.textContent = t.dataset.info;
     tip.style.left = (e.clientX - b.left) + "px";
     tip.style.top  = (e.clientY - b.top)  + "px";
     tip.classList.add("on");
   };
-  wrap.addEventListener("mousemove", show);
-  wrap.addEventListener("click", show);
-  wrap.addEventListener("mouseleave", () => tip.classList.remove("on"));
+  stage.addEventListener("mousemove", showTip);
+  stage.addEventListener("click", showTip);
+  stage.addEventListener("mouseleave", () => tip.classList.remove("on"));
 })();
+
+function setTool(t){
+  tool = t;
+  document.getElementById("tool-select").setAttribute("aria-pressed", String(t === "select"));
+  document.getElementById("tool-draw").setAttribute("aria-pressed", String(t === "draw"));
+  document.getElementById("plan").style.cursor = t === "draw" ? "crosshair" : "default";
+  drawHud();
+}
+
+function deleteSelected(){
+  const i = state.focusRect;
+  if(i < 0 || !state.rects[i]) return;
+  if(state.rects.length < 2){ toast("A plan needs at least one area.", true); return; }
+  state.rects.splice(i, 1);
+  state.focusRect = Math.min(i, state.rects.length - 1);
+  drawAreas();
+  refresh();
+}
+
+/* Keyboard shortcuts, ignored while a field has the focus, so that typing
+   a dimension never deletes the area it belongs to. */
+document.addEventListener("keydown", e => {
+  const t = document.activeElement;
+  if(t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+  if(e.metaKey || e.ctrlKey || e.altKey) return;
+  const sel = state.rects[state.focusRect];
+
+  switch(e.key){
+    case "v": case "V": setTool("select"); break;
+    case "d": case "D": setTool("draw"); break;
+    case "0": view.auto = true; refresh(); break;
+    case "+": case "=": zoomTo(view.upp/1.3, null); break;
+    case "-": case "_": zoomTo(view.upp*1.3, null); break;
+    case "Escape":
+      if(tool === "draw") setTool("select"); else select(-1);
+      break;
+    case "Delete": case "Backspace":
+      if(!sel) return;
+      deleteSelected();
+      break;
+    case "ArrowLeft": case "ArrowRight": case "ArrowUp": case "ArrowDown": {
+      if(!sel) return;
+      const step = e.shiftKey ? 100 : GRID;
+      if(e.key === "ArrowLeft")  sel.x = tidy(sel.x - step);
+      if(e.key === "ArrowRight") sel.x = tidy(sel.x + step);
+      if(e.key === "ArrowUp")    sel.y = tidy(sel.y - step);
+      if(e.key === "ArrowDown")  sel.y = tidy(sel.y + step);
+      drawAreas();
+      refresh();
+      break;
+    }
+    default: return;
+  }
+  e.preventDefault();
+});
+
+document.getElementById("tool-select").addEventListener("click", () => setTool("select"));
+document.getElementById("tool-draw").addEventListener("click", () => setTool("draw"));
+document.getElementById("del-area").addEventListener("click", deleteSelected);
+document.getElementById("zoom-in").addEventListener("click", () => zoomTo(view.upp/1.3, null));
+document.getElementById("zoom-out").addEventListener("click", () => zoomTo(view.upp*1.3, null));
+document.getElementById("zoom-fit").addEventListener("click", () => { view.auto = true; refresh(); });
+
+(function bindDimEdit(){
+  const inp = document.getElementById("dim-edit");
+  inp.addEventListener("keydown", e => {
+    if(e.key === "Enter"){ e.preventDefault(); closeDimEdit(true); }
+    if(e.key === "Escape"){ e.preventDefault(); closeDimEdit(false); }
+    e.stopPropagation();
+  });
+  inp.addEventListener("blur", () => closeDimEdit(true));
+})();
+
+/* The viewBox follows the stage's shape, so a resized window has to redraw. */
+if(window.ResizeObserver){
+  new ResizeObserver(() => scheduleDraw()).observe(document.getElementById("plan-stage"));
+}
 
 /* ---- numbers, notes and the cut list ---- */
 function drawResults(L){
@@ -1260,7 +2054,9 @@ function drawResults(L){
     `${L.cutCount} cut${L.cutCount===1?"":"s"} across ${L.rowCount} rows`;
 }
 
-/* ---- the rectangle editor ---- */
+/* ---- the rectangle editor ----
+   The panel and the plan are two views of one list, so selecting in
+   either shows in both. `state.focusRect` is that selection. */
 function drawAreas(){
   const box = document.getElementById("areas");
   box.innerHTML = "";
@@ -1269,11 +2065,11 @@ function drawAreas(){
   state.rects.forEach((r,i) => {
     const row = document.createElement("div");
     row.className = "area-row";
-    row.innerHTML = `<span class="tag">${String.fromCharCode(65+i)}</span>` +
+    row.innerHTML = `<span class="tag" data-sel="${i}" title="Select area ${letter(i)}">${letter(i)}</span>` +
       ["x","y","w","h"].map(k =>
         `<input type="number" step="${step}" data-i="${i}" data-k="${k}" value="${toDisplay(r[k])}"
-           aria-label="Area ${String.fromCharCode(65+i)} ${k}">`).join("") +
-      `<button class="x-btn" data-del="${i}" aria-label="Remove area ${String.fromCharCode(65+i)}" ${state.rects.length<2?"disabled":""}>✕</button>`;
+           aria-label="Area ${letter(i)} ${k}">`).join("") +
+      `<button class="x-btn" data-del="${i}" aria-label="Remove area ${letter(i)}" ${state.rects.length<2?"disabled":""}>✕</button>`;
     box.appendChild(row);
   });
 
@@ -1285,15 +2081,40 @@ function drawAreas(){
       state.rects[+i][k] = (k === "w" || k === "h") ? Math.max(1, v) : v;
       refresh();
     });
-    inp.addEventListener("focus", e => { state.focusRect = +e.target.dataset.i; refresh(); });
-    inp.addEventListener("blur",  () => { state.focusRect = -1; refresh(); });
+    // Focusing a field selects that area on the plan. It stays selected
+    // afterwards, because the selection is now something the user drives
+    // from either side rather than a passing highlight.
+    inp.addEventListener("focus", e => { state.focusRect = +e.target.dataset.i; markAreaRows(); refresh(); });
   });
+  box.querySelectorAll("[data-sel]").forEach(t =>
+    t.addEventListener("click", e => {
+      state.focusRect = +e.currentTarget.dataset.sel;
+      markAreaRows(); refresh();
+    }));
   box.querySelectorAll("[data-del]").forEach(b =>
     b.addEventListener("click", e => {
-      state.rects.splice(+e.currentTarget.dataset.del, 1);
+      const i = +e.currentTarget.dataset.del;
+      state.rects.splice(i, 1);
+      if(state.focusRect >= state.rects.length) state.focusRect = state.rects.length - 1;
       drawAreas(); refresh();
     }));
+  markAreaRows();
   document.getElementById("unit-note").textContent = state.units === "m" ? "metres" : "mm";
+}
+
+/** Show which row is the selected area, without rebuilding the list. */
+function markAreaRows(){
+  document.querySelectorAll("#areas .area-row").forEach((row,i) =>
+    row.classList.toggle("sel", i === state.focusRect));
+}
+
+/** Push one rectangle's figures back into its row, for live dragging. */
+function syncAreaRow(i){
+  const r = state.rects[i];
+  if(!r) return;
+  document.querySelectorAll(`#areas input[data-i="${i}"]`).forEach(inp => {
+    inp.value = toDisplay(r[inp.dataset.k]);
+  });
 }
 
 /* ---- direction and corner pickers ------------------------------
@@ -1457,6 +2278,8 @@ function applyPlan(plan, note, bad){
   Object.assign(state, plan);
   state.rects = plan.rects.map(r => ({...r}));
   state.focusRect = -1;
+  view.auto = true;              // a different room deserves a fresh look at it
+  setTool("select");
   syncInputs();
   drawAreas();
   drawPickers();
@@ -1566,10 +2389,13 @@ document.getElementById("plan-name").addEventListener("input", e => {
 /* ================================================================
    WIRING
    ================================================================ */
+let lastLayout = null;      // kept so panning and zooming need not recompute
+
 function refresh(){
-  const L = computeLayout(state);
-  drawPlan(L);
-  drawResults(L);
+  lastLayout = computeLayout(state);
+  drawPlan(lastLayout);
+  drawResults(lastLayout);
+  drawHud();
   writePlanText();
 }
 
@@ -1612,16 +2438,23 @@ document.getElementById("currency").addEventListener("input", e => {
   refresh();
 });
 document.getElementById("units").addEventListener("change", e => {
-  state.units = e.target.value; drawAreas();
+  state.units = e.target.value;
+  drawAreas();
+  refresh();                     // the chips on the plan carry units as well
 });
 document.getElementById("add-area").addEventListener("click", () => {
   const bb = bboxOf(state.rects);
-  state.rects.push({x:bb.x+bb.w, y:bb.y, w:1500, h:1500});
+  const r = {x:bb.x+bb.w, y:bb.y, w:1500, h:1500};
+  state.rects.push(r);
+  state.focusRect = state.rects.length - 1;
+  ensureVisible(r);              // no use adding an area off the edge of the view
   drawAreas(); refresh();
 });
 document.querySelectorAll("[data-preset]").forEach(b =>
   b.addEventListener("click", () => {
     state.rects = PRESETS[b.dataset.preset].map(r => ({...r}));
+    state.focusRect = -1;
+    view.auto = true;
     drawAreas(); refresh();
   }));
 

@@ -4,10 +4,12 @@ A laminate flooring calculator that works out how many planks a room needs by
 simulating the actual layout, piece by piece, rather than dividing floor area by
 plank area.
 
-Rooms are built from rectangles, so L-shapes, T-shapes and alcoves all work. You
-choose which way the planks run, which corner starts with an uncut plank, and
-how far each row staggers — and it draws the result, flags the cuts that will
-cause trouble, and gives you a cut list.
+Rooms are built from rectangles, so L-shapes, T-shapes and alcoves all work.
+Draw them straight onto the plan and drag them about — they snap to each other's
+edges — or type the figures if you have them. You choose which way the planks
+run, which corner starts with an uncut plank, and how far each row staggers, and
+it draws the result, flags the cuts that will cause trouble, and gives you a cut
+list.
 
 ## Running it
 
@@ -27,9 +29,37 @@ npm test
 ```
 
 The tests slice the layout engine out of `index.html` and run it in Node. They
-cover the coordinate transform, the piece-packing invariants, the pricing, the
-guards against nonsense input, the handling of damaged or foreign save files,
-and a proof that the herringbone lattice tiles the floor exactly at every angle. No install step; Node 18 or newer.
+cover the coordinate transform, the piece-packing invariants, the snapping maths
+behind dragging areas about, the pricing, the guards against nonsense input, the
+handling of damaged or foreign save files, and a proof that the herringbone
+lattice tiles the floor exactly at every angle. No install step; Node 18 or
+newer.
+
+## Drawing the room
+
+The plan is a proper drawing surface, not a picture of the answer.
+
+| | Mouse | Touch |
+| --- | --- | --- |
+| Zoom | Scroll, the **+** / **−** buttons, or the `+` and `−` keys | Pinch |
+| Fit the room | **Fit**, or the `0` key | **Fit** |
+| Pan | Drag the background, or hold the middle button | Drag the background, or two fingers |
+| Select | Click an area, or its letter in the panel | Tap it |
+| Move | Drag it — edges snap to the other areas | Drag it |
+| Resize | Drag any of the eight handles | Same, drawn larger for a finger |
+| Set a size exactly | Click the figure on the selected area and type it | Tap it |
+| Draw a new area | **Draw** or `D`, then drag one out | **Draw**, then drag |
+| Nudge | Arrow keys, 10 mm, or 100 mm with shift | — |
+| Delete | **Delete**, or the `Delete` key | **Delete** |
+
+Snapping works to a fixed distance on screen, so it feels the same however far
+in you are zoomed, and a drag that catches nothing rounds to 10 mm. A second
+finger landing mid-drag puts the area back and turns the gesture into a pinch,
+so a stray thumb cannot move a wall.
+
+On anything wider than a tablet in portrait the page becomes two panes that
+scroll separately — settings on the left, the drawing filling the right — so
+nothing has to be scrolled to while you work.
 
 ## What it accounts for
 
