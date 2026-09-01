@@ -117,8 +117,13 @@ textarea#plan-text:focus{outline:2px solid var(--amber);outline-offset:1px}
 .work{padding:1.1rem 1.3rem 4rem;min-width:0}
 
 /* A tablet held either way is wide enough for both panes, so the
-   breakpoint sits below an iPad in portrait rather than above it. */
-@media (min-width:760px){
+   breakpoint sits below an iPad in portrait rather than above it.
+
+   It asks for height as well, because the two-pane shell does not scroll:
+   the header, the tool row and a usable drawing need about 430 px between
+   them, and a phone on its side has barely 400. Below that it is better to
+   be a scrolling page than a squashed app. */
+@media (min-width:760px) and (min-height:500px){
   html{height:100%}
   body{display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden}
   .topbar{position:static;flex:none}
@@ -126,14 +131,15 @@ textarea#plan-text:focus{outline:2px solid var(--amber);outline-offset:1px}
   .rail{height:100%}
   .work{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
 }
-@media (min-width:760px) and (max-width:1059px){
+@media (min-width:760px) and (min-height:500px) and (max-width:1059px){
   .shell{grid-template-columns:292px minmax(0,1fr)}
   .rail{padding:.9rem .75rem 3rem}
   .work{padding:.9rem .9rem 4rem}
 }
-/* On a phone it is one column, and the drawing comes first: the settings
-   are worth scrolling to, a plan you cannot see is not. */
-@media (max-width:759px){
+/* On a phone — or anything too short for the two-pane shell — it is one
+   column, and the drawing comes first: the settings are worth scrolling to,
+   a plan you cannot see is not. */
+@media (max-width:759px),(max-height:499px){
   .shell{grid-template-columns:1fr}
   .work{order:1;padding-bottom:1.5rem}
   .rail{order:2;border-right:0;border-top:1px solid var(--edge)}
@@ -235,7 +241,7 @@ input[type=checkbox]{accent-color:var(--amber);width:1rem;height:1rem;margin:0}
   overscroll-behavior:contain;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
 }
-@media (min-width:760px){
+@media (min-width:760px) and (min-height:500px){
   .plan-stage{height:calc(100dvh - 248px);min-height:300px;max-height:none}
 }
 #plan{width:100%;height:100%;display:block;cursor:default}

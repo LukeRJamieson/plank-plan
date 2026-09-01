@@ -70,6 +70,14 @@ edit("native stylesheet", "</head>", `<style>
   --safe-l:env(safe-area-inset-left,0px);
   --safe-r:env(safe-area-inset-right,0px);
 }
+/* The banner is a native view drawn over the bottom of the WebView, gesture
+   area included — not above it. So the space to keep clear is the greater of
+   the two, not their sum; adding them reserved a strip the banner never
+   covered, which showed as a dead band on a phone in landscape. */
+:root{--bottom-inset:max(var(--ad-inset),var(--safe-b))}
+/* html carries the ground too. body is deliberately shorter than the viewport
+   in the two-pane layout, and without this the difference paints black. */
+html{background:var(--mat)}
 html,body{overscroll-behavior:none}
 /* Long-press selection all over a drawing tool feels broken; the fields
    still need it. */
@@ -82,18 +90,20 @@ input,textarea,select{-webkit-user-select:text;user-select:text}
   padding-right:calc(1.1rem + var(--safe-r));
 }
 /* One column: the page scrolls, so the banner just needs room at the end. */
-body{padding-bottom:calc(var(--ad-inset) + var(--safe-b))}
+body{padding-bottom:var(--bottom-inset)}
 
-@media (min-width:760px){
+/* Matches the breakpoint in index.html, height condition included: below it
+   the page scrolls again and the banner only needs padding at the end. */
+@media (min-width:760px) and (min-height:500px){
   /* Two panes: nothing scrolls, so the shell itself has to be shorter. */
   body{
-    height:calc(100vh - var(--ad-inset) - var(--safe-b));
-    height:calc(100dvh - var(--ad-inset) - var(--safe-b));
+    height:calc(100vh - var(--bottom-inset));
+    height:calc(100dvh - var(--bottom-inset));
     padding-bottom:0;
   }
   .plan-stage{
-    height:calc(100vh - 248px - var(--ad-inset) - var(--safe-b));
-    height:calc(100dvh - 248px - var(--ad-inset) - var(--safe-b));
+    height:calc(100vh - 248px - var(--bottom-inset));
+    height:calc(100dvh - 248px - var(--bottom-inset));
   }
   .rail{padding-left:calc(1.1rem + var(--safe-l))}
   .work{padding-right:calc(1.3rem + var(--safe-r))}

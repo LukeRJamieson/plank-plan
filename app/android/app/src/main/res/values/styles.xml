@@ -13,6 +13,11 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- Anything the WebView does not cover — the strip beside the ad
+             banner on a phone held sideways — paints this rather than black.
+             CSS cannot reach outside the WebView, so it has to be set here. -->
+        <item name="android:windowBackground">@color/plankMat</item>
+        <item name="android:colorBackground">@color/plankMat</item>
     </style>
 
 

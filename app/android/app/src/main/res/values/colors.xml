@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#1E2A26</color>
+    <color name="colorPrimaryDark">#1E2A26</color>
+    <color name="colorAccent">#E8B04B</color>
+    <!-- The cutting mat: the app's ground, kept in step with the mat token
+         in index.html. -->
+    <color name="plankMat">#1E2A26</color>
+</resources>
