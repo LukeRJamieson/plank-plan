@@ -1,0 +1,24 @@
+{
+  "appId": "com.lukejamieson.plankplan",
+  "appName": "Plank Plan",
+  "webDir": "www",
+  "backgroundColor": "#1E2A26",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#1E2A26"
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#1E2A26",
+    "limitsNavigationsToAppBoundDomains": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "launchShowDuration": 600,
+      "backgroundColor": "#1E2A26",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
+    }
+  }
+}

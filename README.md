@@ -86,6 +86,27 @@ Lengths are finished sizes on the floor. The 8–10 mm expansion gap is absorbed
 by the extra allowance rather than deducted, which errs slightly on the side of
 buying enough.
 
+## The phone and tablet apps
+
+`app/` builds the same page for Android and iOS through Capacitor. It is a
+shell, not a second copy: `index.html` stays the source of truth and is never
+edited for the app's benefit, so a fix to the layout engine ships to the web
+and both stores at once.
+
+```bash
+cd app
+npm install
+npm run www        # build the app bundle from ../index.html
+npm run check      # verify it before a release
+npm run android    # open it in Android Studio
+npm run ios        # open it in Xcode (macOS only)
+```
+
+The app build is fully offline — the typefaces are vendored, so it makes no
+network request at all — and carries an AdMob banner with the GDPR and
+App Tracking Transparency prompts wired up. It ships on Google's test ad IDs;
+`app/README.md` covers swapping them for real ones.
+
 ## Publishing to GitHub Pages
 
 The repo is a static site with `index.html` at the root, so Pages needs no

@@ -23,7 +23,13 @@ completely different ways — see below.
 index.html                 the entire application — markup, styles, logic
 tests/engine.test.mjs      Node tests for the geometry, layout maths and file loading
 package.json               scripts only; there are no dependencies
+app/                       the Android and iOS builds — a shell around index.html
 ```
+
+`app/` is a Capacitor wrapper, not a second copy of the app. It has its own
+dependencies and its own README; nothing in it is needed to work on the web
+version, and the web version is still the primary one. See **The app builds**
+below before touching it.
 
 ## The plan view
 
@@ -109,6 +115,10 @@ onto three rows and cost the plan 96 px.
 opened straight off a phone, emailed, or dropped on a static host. There is no
 bundler, no transpiler, no `node_modules`. Do not split it into modules, add a
 framework, or introduce a build step without being asked.
+
+The app builds do not change this. `app/` reads `index.html` and writes a
+copy; it never edits the original, and the web version has gained no
+dependency from the port existing.
 
 **No dependencies.** The only network request is the Google Fonts stylesheet,
 and the page degrades to system fonts without it.
@@ -398,6 +408,32 @@ Don't "fix" these without asking — they are choices, not oversights.
 - `computeLayout` returns `{ overflow: true }` above ~40,000 pieces. That guard
   exists because typing `5000` into a millimetre field while thinking in metres
   would otherwise lock the page up. Keep it.
+
+## The app builds
+
+`app/` wraps the same `index.html` in a WebView for the two stores. Read
+`app/README.md` before working in there; the parts worth knowing from out here:
+
+- **`index.html` is never edited for the app's benefit.**
+  `app/scripts/build-www.mjs` makes four additive changes on the way into
+  `app/www/`: `viewport-fit=cover`, swapping the Google Fonts link for
+  vendored faces, a stylesheet for the safe areas and the ad banner, and the
+  `native.js` shell. Every one of those **throws if its anchor has moved**, so
+  changing the header markup or the viewport meta will break that build
+  loudly rather than shipping something wrong.
+- **`native.js` stands down when it is not in an app**, so the built page is
+  still the same page in a browser. There is no bundler in the app build
+  either: Capacitor registers its plugins on `window.Capacitor.Plugins` at
+  runtime, which is what lets a plain script call them.
+- **The ad banner is a native view under the page, not part of it.** It
+  reports its height, `native.js` writes that to `--ad-inset`, and the shell
+  and the plan stage both subtract it. If you change how `.plan-stage` is
+  sized, change the matching rule in the build script — the stage height is
+  spelled out in two places on purpose, because the app one has to subtract
+  the banner.
+- **`npm run check` is the gate before a release.** It catches an ad unit left
+  on Google's test ID with `testing:false`, a font that did not get bundled,
+  and an engine that did not survive the copy.
 
 ## Style
 

@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    Plank Plan's mark: staggered oak boards with the amber set-out point on a
+    join. Deliberately full bleed. Android crops an adaptive icon to the
+    central 66% and iOS rounds the corners off, so anything with a margin ends
+    up either floating in space or losing its edges. A repeating pattern
+    survives both, and the amber dot — the thing the whole app hangs on — sits
+    well inside the safe circle so it is never the bit that gets cut.
+  -->
+  <rect width="1024" height="1024" fill="#1E2A26"/>
+  <g stroke="#A87F4E" stroke-width="8">
+    <!-- five courses, each shifted along like a real stagger, running off
+         both edges so no course ends inside the frame -->
+    <rect x="-120" y="-30" width="470" height="240" fill="#D9B382"/>
+    <rect x="350"  y="-30" width="420" height="240" fill="#C08653"/>
+    <rect x="770"  y="-30" width="380" height="240" fill="#D9B382"/>
+
+    <rect x="-120" y="210" width="300" height="200" fill="#C08653"/>
+    <rect x="180"  y="210" width="460" height="200" fill="#D9B382"/>
+    <rect x="640"  y="210" width="240" height="200" fill="#86AE8E"/>
+    <rect x="880"  y="210" width="270" height="200" fill="#D9B382"/>
+
+    <rect x="-120" y="410" width="520" height="200" fill="#D9B382"/>
+    <rect x="400"  y="410" width="330" height="200" fill="#C08653"/>
+    <rect x="730"  y="410" width="420" height="200" fill="#D9B382"/>
+
+    <rect x="-120" y="610" width="250" height="200" fill="#86AE8E"/>
+    <rect x="130"  y="610" width="470" height="200" fill="#D9B382"/>
+    <rect x="600"  y="610" width="330" height="200" fill="#C08653"/>
+    <rect x="930"  y="610" width="220" height="200" fill="#D9B382"/>
+
+    <rect x="-120" y="810" width="420" height="220" fill="#C08653"/>
+    <rect x="300"  y="810" width="450" height="220" fill="#D9B382"/>
+    <rect x="750"  y="810" width="400" height="220" fill="#86AE8E"/>
+  </g>
+
+  <!-- grain, just enough that it reads as timber rather than brickwork -->
+  <g stroke="rgba(90,60,25,.20)" stroke-width="7" stroke-linecap="round">
+    <path d="M40 90h250M420 130h280M70 300h90M240 330h340M60 500h400M470 540h210
+             M60 700h60M200 740h330M660 690h220M40 900h280M380 940h300"/>
+  </g>
+
+  <!-- The set-out point, on the join between two courses and comfortably
+       inside the 66% the launcher will keep. -->
+  <circle cx="400" cy="410" r="96" fill="#E8B04B" stroke="#1E2A26" stroke-width="26"/>
+</svg>

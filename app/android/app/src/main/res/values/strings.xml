@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Plank Plan</string>
+    <string name="title_activity_main">Plank Plan</string>
+    <string name="package_name">com.lukejamieson.plankplan</string>
+    <string name="custom_url_scheme">com.lukejamieson.plankplan</string>
+</resources>

@@ -1,0 +1,25 @@
+ext {
+    // Play requires new apps to target a recent API, and the bar moves every
+    // August. Capacitor 6 ships 34, which is already below it — 35 is the
+    // current floor. Check the current requirement before each release:
+    // https://developer.android.com/google/play/requirements/target-sdk
+    //
+    // Targeting 35 opts into Android 15's enforced edge-to-edge drawing. The
+    // safe-area CSS in the built page already handles that, but it is the
+    // thing to look at first if the status bar overlaps the header on a
+    // real Android 15 device.
+    minSdkVersion = 23
+    compileSdkVersion = 35
+    targetSdkVersion = 35
+    androidxActivityVersion = '1.8.0'
+    androidxAppCompatVersion = '1.6.1'
+    androidxCoordinatorLayoutVersion = '1.2.0'
+    androidxCoreVersion = '1.12.0'
+    androidxFragmentVersion = '1.6.2'
+    coreSplashScreenVersion = '1.0.1'
+    androidxWebkitVersion = '1.9.0'
+    junitVersion = '4.13.2'
+    androidxJunitVersion = '1.1.5'
+    androidxEspressoCoreVersion = '3.5.1'
+    cordovaAndroidVersion = '10.1.1'
+}

@@ -1,0 +1,16 @@
+# The generated web bundle: rebuilt from ../index.html by `npm run www`.
+www/
+node_modules/
+
+# The native projects themselves ARE committed — AndroidManifest.xml,
+# Info.plist and PrivacyInfo.xcprivacy are hand-edited and would be painful to
+# reconstruct. Capacitor's own android/.gitignore and ios/.gitignore already
+# exclude the build output inside them.
+
+# Signing material. Losing these locks you out of updating a published app;
+# committing them lets anyone ship as you. Keep them somewhere backed up and
+# not here.
+*.keystore
+*.jks
+key.properties
+android/keystore.properties

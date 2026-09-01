@@ -1,0 +1,8 @@
+Bricolage Grotesque — SIL Open Font Licence 1.1
+  https://github.com/ateliertriay/bricolage
+
+IBM Plex Sans and IBM Plex Mono — SIL Open Font Licence 1.1
+  https://github.com/IBM/plex
+
+Both licences permit bundling and redistribution inside an application
+provided this notice travels with the font files.
