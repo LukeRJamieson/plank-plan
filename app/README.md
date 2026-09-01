@@ -23,6 +23,54 @@ would gain nothing a user could see. Capacitor puts the same page in a
 WebView on both platforms, so a fix to the room geometry ships everywhere at
 once — including the web, which stays the primary way in.
 
+## Building for Android
+
+The debug APK and a signed release AAB have both been built and checked from
+this repo, on Android Studio AI-261 with SDK 36. Three things had to be sorted
+out to get there, and they are the three that will stop you too.
+
+**Set the Gradle JDK to 17, 18 or 21 — not the bundled one.** Android Studio
+ships JBR 25, which Gradle 8.13 cannot run on. It fails with a message that
+points nowhere useful:
+
+```
+Failed to query the value of property 'buildFlowServiceProperty'.
+> Could not isolate value ...BuildFlowService$Parameters_Decorated
+```
+
+Fix it in *Settings → Build, Execution, Deployment → Build Tools → Gradle →
+Gradle JDK*.
+
+**`local.properties` needs forward slashes.** It is a Java properties file, so
+a backslash is an escape character and a Windows path silently loses every
+separator. The error is "The filename, directory name, or volume label syntax
+is incorrect", which never mentions the file. Android Studio writes this file
+itself when you open the project, so you may not see it until it bites.
+
+**The toolchain is ahead of what Capacitor 6 ships.** AGP 8.2.1 warns that it
+was only tested to `compileSdk 34`; this project is on AGP 8.9.1 and Gradle
+8.13 so that compiling against 36 is properly supported rather than suppressed.
+
+```bash
+cd app/android
+./gradlew :app:assembleDebug      # APK for a device
+./gradlew :app:bundleRelease      # signed AAB for Play
+```
+
+### Signing
+
+`bundleRelease` reads `android/keystore.properties`, which is not committed.
+Copy `keystore.properties.example`, then make the key once:
+
+```bash
+keytool -genkey -v -keystore plank-plan-upload.jks -alias upload \
+        -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Back up the `.jks` and its passwords somewhere that is not this machine.
+Without the properties file the release build stays unsigned, which fails at
+upload rather than quietly shipping something you cannot update.
+
 ## Working on it
 
 ```bash
@@ -81,8 +129,8 @@ is a confusing way to find out.
 ## Things that will bite
 
 - **`targetSdkVersion` moves every August.** `android/variables.gradle` is set
-  to 35. Check the current floor before each release; Play rejects new apps
-  below it.
+  to 36. Check the current floor before each release; Play rejects new apps
+  below it, and that deadline has just passed as of this writing.
 - **`PrivacyInfo.xcprivacy` must be added to the Xcode target**, not just left
   on disk. Drag it into the project and tick "App" under Target Membership, or
   the upload is rejected.

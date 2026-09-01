@@ -1,16 +1,19 @@
 ext {
-    // Play requires new apps to target a recent API, and the bar moves every
-    // August. Capacitor 6 ships 34, which is already below it — 35 is the
-    // current floor. Check the current requirement before each release:
+    // Play requires new apps to target a recent API and the bar moves every
+    // August, so check it before each release:
     // https://developer.android.com/google/play/requirements/target-sdk
     //
-    // Targeting 35 opts into Android 15's enforced edge-to-edge drawing. The
-    // safe-area CSS in the built page already handles that, but it is the
-    // thing to look at first if the status bar overlaps the header on a
-    // real Android 15 device.
+    // Capacitor 6 ships 34, which is well below the floor now. Compiling
+    // against 36 needs a newer toolchain than Capacitor 6 brings — AGP 8.2.1
+    // warns it was only tested to 34 — so build.gradle and the Gradle wrapper
+    // are on AGP 8.9.1 / Gradle 8.13 rather than suppressing that warning.
+    //
+    // 35 and up opt into enforced edge-to-edge drawing. The safe-area CSS in
+    // the built page already handles it, but that is the thing to look at
+    // first if the status bar ever overlaps the header on a real device.
     minSdkVersion = 23
-    compileSdkVersion = 35
-    targetSdkVersion = 35
+    compileSdkVersion = 36
+    targetSdkVersion = 36
     androidxActivityVersion = '1.8.0'
     androidxAppCompatVersion = '1.6.1'
     androidxCoordinatorLayoutVersion = '1.2.0'
