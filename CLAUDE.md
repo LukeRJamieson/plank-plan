@@ -1,0 +1,310 @@
+# CLAUDE.md
+
+Context for Claude Code working on this repo.
+
+## What this is
+
+Plank Plan works out how many laminate planks a room needs. It does not divide
+floor area by plank area — it simulates the actual laying sequence, piece by
+piece, so the answer accounts for where the cuts genuinely fall and which
+offcuts get reused.
+
+The room is a **union of axis-aligned rectangles**, which is how L-shapes,
+T-shapes and alcoves are expressed. Rectangles may overlap; overlaps are counted
+once.
+
+Two patterns are supported: **straight rows** and **herringbone**. They share
+the material accounting and the pricing, but the piece geometry is worked out in
+completely different ways — see below.
+
+## Layout of the repo
+
+```
+index.html                 the entire application — markup, styles, logic
+tests/engine.test.mjs      Node tests for the geometry, layout maths and file loading
+package.json               scripts only; there are no dependencies
+```
+
+## Hard constraints
+
+**Keep it one file.** `index.html` is self-contained by design so it can be
+opened straight off a phone, emailed, or dropped on a static host. There is no
+bundler, no transpiler, no `node_modules`. Do not split it into modules, add a
+framework, or introduce a build step without being asked.
+
+**No dependencies.** The only network request is the Google Fonts stylesheet,
+and the page degrades to system fonts without it.
+
+**Do not move the `ENGINE:START` / `ENGINE:END` markers** in the `<script>`
+block. `tests/engine.test.mjs` slices the text between them out of the HTML and
+evaluates it in Node, which is what makes the maths testable without a build
+step. Everything inside that block must stay free of DOM access — no
+`document`, no `window`. If you genuinely need to move the markers, update the
+slice logic in the test at the same time.
+
+**No `localStorage` or `sessionStorage`.** All state lives in the in-memory
+`state` object, and persistence is done with files instead — see below. This
+keeps the file portable and lets it run inside sandboxed iframes.
+
+## How the engine works
+
+Everything hinges on one idea: rather than write eight variants for the
+direction × starting-corner combinations, the room is transformed into **plank
+space** — a coordinate system where planks always run left to right and laying
+always begins at the top-left corner.
+
+```
+real space  --toPlank-->  plank space  --lay the planks-->  pieces
+                                                              |
+drawing     <--toReal----------------------------------------+
+```
+
+`makeTransform()` composes at most two operations, each of which is its own
+inverse:
+
+1. **swap** the axes, when `dir === "v"` (planks running top to bottom)
+2. **mirror** in X and/or Y, so the chosen starting corner lands on the origin
+
+`toPlank` is `mirror(swap(r))`; `toReal` is `swap(mirror(r))`. The
+`toReal(toPlank(r)) === r` round trip is asserted in the tests for all eight
+combinations — if you touch this function, that test is your safety net.
+
+`computeStraight()` then runs these stages:
+
+1. **Rows.** Sweep bands of `plankW` down the bounding box, starting at the
+   set-out point. Row indices run *negative* into the strip between that point
+   and the wall, so `k` is the position in the pattern and `k - kLo` is the
+   display number counting from the wall. Keep those two separate: the stagger
+   must key off `k`, or the pattern shifts when the set-out moves.
+2. **Coverage.** For each band, take the union of the X-intervals of every
+   rectangle that overlaps it. An L-shape's narrow section simply yields shorter
+   rows. Disjoint intervals (a room in two parts) fall out for free.
+3. **Rip detection.** Compare the band's true floor area against
+   `coveredWidth × plankW`. A shortfall means the floor changes depth partway
+   along the row, so planks there need a lengthwise cut. This affects labour,
+   not plank count.
+4. **The plank grid.** Each row uses an infinite repeating grid of `plankL`
+   offset by `(rowIndex * stagger) % plankL`. Pieces are that grid clipped to
+   the covered intervals. This is what makes staggering, and the short pieces it
+   produces at row ends, emerge naturally.
+5. **Material accounting.** Walk the pieces in laying order. A full-length piece
+   always consumes a fresh plank. A short piece takes the *smallest saved offcut
+   that fits*, and failing that a new plank, with the remainder returned to the
+   pool if it clears `minOff`. Best-fit rather than first-fit, because it leaves
+   longer offcuts available for the longer cuts still to come.
+
+The offcut pool is the single biggest lever in the whole model: on the L-shape
+preset, reuse on gives ~6% waste, reuse off gives ~26%.
+
+## How herringbone works
+
+Herringbone does not use plank space at all. The whole pattern is one lattice:
+
+```
+base = i*(L, L) + j*(-W, W)
+  a plank of L x W sits at base
+  a plank of W x L sits at base + (L, 0)
+```
+
+The determinant of those lattice vectors is exactly `2*L*W` — the area of the
+two planks — so it tiles the plane with no gaps and no overlaps **at any
+length-to-width ratio**. Worth knowing before you "fix" it: herringbone does not
+require a 2:1 or 4:1 plank, that ratio is only how it looks.
+
+The lattice is generated in its own space, then rotated about the anchor corner
+by `hbAngle` (45, 135, 0 or 90 degrees). Because every plank shares one
+rotation, the drawing hands that transform straight to SVG as a group transform
+rather than rotating each plank itself. The clip path sits on an *untransformed*
+parent group — putting it on the rotated group would drag the room outline round
+with the pattern.
+
+To decide whether a plank is a whole field plank or a border cut, its rotated
+corners are clipped against the room with Sutherland–Hodgman (`clipToRect`) and
+the resulting polygon areas summed. The room is decomposed into non-overlapping
+rectangles first (`disjointRects`), because clipping against overlapping
+rectangles would double-count the overlap.
+
+Pieces under 0.05% of a plank are grazes at a wall rather than flooring, so they
+are dropped — but their area accumulates into `sliverArea` so the tiling can
+still be verified exactly. The test `the herringbone lattice tiles the floor
+exactly` asserts `sum(piece areas) + sliverArea === floorArea` to 1e-9 for every
+preset at every angle. **That test is the proof the lattice is correct.** If you
+touch the lattice, the rotation or the clipper, it is what will catch you.
+
+Border pieces are paired by *area* rather than length. In herringbone a plank
+cut on a wall line yields two pieces that fit opposite walls, so the pairing is
+physically real, but optimistic — the cuts are angled and not every pair marries
+up. The UI therefore shows both the matched figure and the
+fresh-plank-per-border figure and says the answer sits between them. Keep that
+honesty if you rework the notes.
+
+## Saving and loading
+
+A plan is exactly the contents of `defaultPlan()` — the user's input, nothing
+derived. Results are cheap to recompute and would only go stale in a file, so
+they are never saved.
+
+`state` is built as `{...defaultPlan(), focusRect: -1}`. That is the contract:
+**anything in `defaultPlan()` is saved and loaded, anything added to `state` on
+top of it is transient.** If you add a setting, add it to `defaultPlan()`, to
+`sanitisePlan()`, and to `syncInputs()` or a picker — all three, or it will
+silently fail to survive a save. This has already been got wrong once: the
+set-out point worked perfectly in the UI while quietly not saving, because the
+engine reads it as `st.originX || 0` and so never noticed it was missing. The
+test `the set-out point saves and reloads` is what caught it, and there is a
+test of that shape for every setting.
+
+Saving builds `{format, version, saved, plan}` and downloads it as
+`<slug>.plankplan.json`. Loading accepts a file from anywhere, so
+**everything read out of one is treated as hostile.** `sanitisePlan()` checks
+every field against the defaults rather than trusting it: numbers are clamped to
+a range, enums are checked against an allow-list, strings are length-capped,
+rectangles with negative or non-finite dimensions are dropped, and the area list
+is capped at `MAX_AREAS`. It returns `{plan, warnings, ok}` and never throws —
+a truncated or completely unrelated JSON file loads into something usable and
+says what it could not read. Only `JSON.parse` failures are caught by the
+caller.
+
+One distinction that is easy to get wrong, and has a test on it: a plan with
+**no `rects` field at all** is just a missing setting and falls back silently,
+while a plan with a `rects` array that yields nothing usable warns that the room
+was reset.
+
+`defaultPlan()` returns a fresh object each call, including deep-copied
+rectangles. It must stay that way or the presets get mutated through the
+returned plan; there is a test for it.
+
+Two escape hatches exist because sandboxed pages can have capabilities removed:
+"New" arms and confirms on a second click rather than calling `confirm()`, and
+the plan-text box in the rail carries the same JSON for environments where the
+download is blocked. `writePlanText()` refuses to overwrite the box while it has
+focus, so a paste in progress survives a redraw.
+
+## The set-out point
+
+`originX` / `originY` say where the corner of the first full plank sits,
+measured **in from the chosen starting corner, in room coordinates** — the same
+axes the user types rectangles in. Zero on both starts hard against the walls,
+which is the old behaviour.
+
+Room coordinates rather than plank coordinates is the deliberate choice: it
+matches what the user already typed, and the conversion is one swap, because
+plank space has already put the chosen corner at the origin and pointed the
+planks along +x. So the offset only needs its axes exchanged when the planks run
+the other way:
+
+```js
+const oAlong  = st.dir === "v" ? st.originY : st.originX;   // along the planks
+const oAcross = st.dir === "v" ? st.originX : st.originY;   // across the rows
+```
+
+Herringbone applies the same offset directly to its anchor, negating it at a
+right or bottom corner so "in from the corner" always means into the room.
+
+`balanceRows()` solves `span = 2d + n*plankW` for the largest `n` leaving `d`
+within one plank width, giving `d = (leftover + plankW)/2`. On the default room
+that turns a 192/92 mm edge split into an even 142/142 for the same 86 planks. A
+room that already divides exactly is left at zero — balancing it would
+manufacture two half-width edge rows where none were needed.
+
+## Invariants worth preserving
+
+The tests encode these; break one and something is wrong.
+
+- Pieces within a row never overlap.
+- Total piece area is at least the floor area, and not wildly more (the only
+  overhang is the final row and edge bands).
+- No piece is longer than `plankL`.
+- A room that divides exactly into planks produces zero cuts and zero waste.
+- All four starting corners give the same plank count on a plain rectangle.
+- Enabling offcut reuse never increases the plank count.
+- Planks cover the whole floor from any set-out point, and no piece exceeds a
+  plank.
+- The edge rows plus the whole rows always add back up to the room depth.
+- Shifting along the row by exactly one plank length changes nothing, since the
+  grid is periodic.
+- `planksUsed === fullPieces + cutCount - offcutSaves`.
+- Herringbone: no piece exceeds one plank, and the piece areas plus `sliverArea`
+  sum exactly to the floor area, at all four angles and any plank ratio.
+- Cost is charged on `packs * perPack`, and a larger allowance never costs less.
+- `sanitisePlan(serialisePlan(p))` returns `p` unchanged, with no warnings.
+- `sanitisePlan` never throws and always returns a plan `computeLayout` accepts,
+  whatever it is handed.
+
+## Domain glossary
+
+| Term | Meaning |
+| --- | --- |
+| Stagger | How far each row's pattern shifts along, so joins don't line up. 300 mm is the usual minimum. |
+| Offcut | The tail left after cutting a plank to fit. Normally starts the next row. |
+| Rip cut | A cut along the plank's length, narrowing it. Needed on the last row and where the floor changes depth. |
+| Expansion gap | The 8–10 mm left at every wall so the floor can move. |
+| End piece | The short piece finishing a row. Under 300 mm it works loose over time, so the app warns. |
+| Herringbone | Square-ended planks in interlocking perpendicular pairs, usually at 45° to the walls. |
+| Field | The main body of the floor away from the borders. A field plank goes down uncut. |
+
+## Deliberate simplifications
+
+Don't "fix" these without asking — they are choices, not oversights.
+
+- **The expansion gap is not deducted.** Counting full room dimensions is
+  slightly conservative, which is the safe direction to be wrong in for someone
+  buying material.
+- **Saw kerf is ignored.** It is under 3 mm and is swallowed by the extra
+  allowance.
+- **Only rectilinear rooms.** No diagonal layouts, herringbone, curved walls or
+  angled bays.
+- **A single stagger value.** Real installers sometimes randomise the offset;
+  a fixed stagger is what manufacturers specify.
+- **Herringbone offcut pairing is area-based**, not real 2D nesting. Solving it
+  properly is bin-packing with rotation; the two-figure range is the honest
+  presentation of an estimate.
+- **No chevron.** Chevron needs planks mitred at the ends — a different product
+  and a different cut list. Herringbone uses square-ended planks.
+- **Pricing assumes whole packs.** `planksBought = packs * perPack`, so per-plank
+  and per-m² prices are charged on what you take home, not what you lay. Set
+  planks per pack to 1 for loose planks.
+- **The cut list caps at 200 rows** to keep the table readable.
+- `computeLayout` returns `{ overflow: true }` above ~40,000 pieces. That guard
+  exists because typing `5000` into a millimetre field while thinking in metres
+  would otherwise lock the page up. Keep it.
+
+## Style
+
+- Vanilla JS, `"use strict"`, no semicolonless style. Two-space indent.
+- Comments explain *why*, not what. The geometry is the part that needs
+  explaining; the DOM wiring does not.
+- All colours come from CSS custom properties in `:root`. Never hard-code a hex
+  value in a rule or in the SVG drawing code — add a token instead.
+- The palette references a cutting mat with oak planks laid on it: dark green
+  ground, warm timber, amber for anything interactive, sage for pieces that came
+  from a saved offcut.
+- Two typefaces: Bricolage Grotesque for headings, IBM Plex Sans for UI. IBM
+  Plex Mono appears only where millimetre figures need to align in a column.
+- User-facing copy is plain and instructional. Warnings say what to do about the
+  problem, not just that it exists.
+
+## Commands
+
+```bash
+npm test              # node --test — no install needed
+python3 -m http.server 8080   # or just open index.html directly
+```
+
+There is no lint or build step. `node --check` on the extracted script is a
+quick syntax sanity check if you want one.
+
+## Ideas not yet built
+
+- Drag the rectangles around in the plan view instead of typing coordinates.
+- Underlay and trim quantities (perimeter length is already derivable).
+- A print stylesheet, so the cut list can go in a pocket.
+- Deduct the expansion gap properly, which needs a real polygon inset rather
+  than a per-rectangle one.
+- Plans in the URL hash, so one can be shared by link rather than by file.
+- Optional `localStorage` autosave for the hosted build, feature-detected so the
+  sandboxed preview still works.
+- Chevron, which needs mitred ends and a different cut list.
+- Double herringbone, where pairs of planks act as one unit.
+- A real 2D nesting solver for herringbone borders, replacing the area estimate.
+- Labour cost alongside material cost.

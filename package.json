@@ -1,0 +1,12 @@
+{
+  "name": "plank-plan",
+  "version": "1.0.0",
+  "description": "Laminate flooring plank calculator that simulates the actual layout",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "serve": "python3 -m http.server 8080"
+  },
+  "license": "MIT"
+}

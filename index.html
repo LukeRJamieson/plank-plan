@@ -1,0 +1,1635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plank Plan — laminate flooring calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TOKENS
+   Palette references a self-healing cutting mat (the surface you
+   actually plan a floor on) with oak-toned planks laid on top.
+   ============================================================ */
+:root{
+  --mat:      #1E2A26;   /* deepest ground */
+  --mat-2:    #24312C;   /* drawing surface */
+  --panel:    #2A3830;   /* control panel */
+  --panel-2:  #33423A;   /* inputs, raised chips */
+  --edge:     rgba(237,239,232,0.14);
+  --edge-2:   rgba(237,239,232,0.28);
+  --ink:      #EDEFE8;
+  --ink-dim:  #9AAA9E;
+  --amber:    #E8B04B;   /* interactive accent */
+  --oak:      #D9B382;   /* full plank */
+  --oak-edge: #A87F4E;
+  --oak-cut:  #C08653;   /* piece cut from a fresh plank */
+  --sage:     #86AE8E;   /* piece cut from a saved offcut */
+  --alert:    #E06A4E;
+  --r-sm: 3px;
+  --r-md: 6px;
+  --shadow: 0 10px 30px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--mat);
+  color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,sans-serif;
+  font-size:15px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;font-weight:800;letter-spacing:-0.02em;margin:0}
+button,input,select{font:inherit;color:inherit}
+
+/* ---------- header ---------- */
+.topbar{
+  position:sticky;top:0;z-index:40;
+  display:flex;align-items:center;gap:1rem;flex-wrap:wrap;
+  padding:.7rem 1.1rem;
+  background:rgba(30,42,38,.92);
+  backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--edge);
+}
+.wordmark{display:flex;align-items:baseline;gap:.55rem}
+.wordmark h1{font-size:1.22rem}
+.wordmark span{color:var(--ink-dim);font-size:.82rem}
+.headline{
+  margin-left:auto;display:flex;align-items:baseline;gap:.5rem;
+  font-family:"IBM Plex Mono",monospace;
+}
+.headline b{font-size:1.5rem;font-weight:500;color:var(--amber);line-height:1}
+.headline em{font-style:normal;color:var(--ink-dim);font-size:.85rem}
+
+.plan-name{
+  width:min(15rem,38vw);padding:.28rem .45rem;
+  background:transparent;border:1px solid transparent;border-radius:var(--r-sm);
+  font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;font-weight:600;font-size:.95rem;
+}
+.plan-name:hover{border-color:var(--edge)}
+.plan-name:focus{background:var(--panel-2);border-color:transparent}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.tools{display:flex;gap:.35rem}
+.tools .btn{padding:.3rem .6rem;font-size:.82rem}
+.btn-danger{border-color:var(--alert);color:var(--alert)}
+.btn-danger:hover{border-color:var(--alert);color:var(--alert);background:#3a2620}
+
+.toast{
+  position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);
+  background:var(--panel-2);border:1px solid var(--edge-2);border-left:3px solid var(--amber);
+  color:var(--ink);padding:.55rem .9rem;border-radius:var(--r-sm);font-size:.86rem;
+  box-shadow:var(--shadow);z-index:60;max-width:min(30rem,90vw);
+  opacity:0;pointer-events:none;transition:opacity .18s;
+}
+.toast.on{opacity:1}
+.toast.bad{border-left-color:var(--alert)}
+
+textarea#plan-text{
+  width:100%;height:8rem;resize:vertical;
+  padding:.45rem .55rem;background:var(--panel-2);color:var(--ink);
+  border:1px solid var(--edge);border-radius:var(--r-sm);
+  font-family:"IBM Plex Mono",monospace;font-size:.72rem;line-height:1.4;
+}
+textarea#plan-text:focus{outline:2px solid var(--amber);outline-offset:1px}
+
+/* ---------- shell ---------- */
+.shell{display:grid;grid-template-columns:352px minmax(0,1fr);gap:0;align-items:start}
+@media (max-width:940px){.shell{grid-template-columns:1fr}}
+
+.rail{
+  background:var(--panel);
+  border-right:1px solid var(--edge);
+  padding:1.1rem 1.1rem 3rem;
+  position:sticky;top:57px;max-height:calc(100vh - 57px);overflow-y:auto;
+}
+@media (max-width:940px){.rail{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--edge)}}
+
+.work{padding:1.1rem 1.3rem 4rem;min-width:0}
+
+/* ---------- rail sections ---------- */
+.sec{margin-bottom:1.6rem}
+.sec > h2{
+  font-size:.95rem;font-weight:600;
+  padding-bottom:.4rem;margin-bottom:.7rem;
+  border-bottom:1px solid var(--edge);
+  display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+}
+.sec > h2 small{font-family:"IBM Plex Sans";font-weight:400;font-size:.76rem;color:var(--ink-dim);letter-spacing:0}
+
+.field{margin-bottom:.7rem}
+.field label{display:block;font-size:.8rem;color:var(--ink-dim);margin-bottom:.22rem}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:.55rem}
+
+input[type=number],input[type=text],select{
+  width:100%;padding:.42rem .55rem;
+  background:var(--panel-2);
+  border:1px solid var(--edge);
+  border-radius:var(--r-sm);
+  font-family:"IBM Plex Mono",monospace;font-size:.9rem;
+}
+select{font-family:"IBM Plex Sans",sans-serif}
+input:focus,select:focus,button:focus-visible{
+  outline:2px solid var(--amber);outline-offset:1px;border-color:transparent;
+}
+input[type=checkbox]{accent-color:var(--amber);width:1rem;height:1rem;margin:0}
+.check{display:flex;align-items:center;gap:.5rem;font-size:.85rem;cursor:pointer;margin-bottom:.55rem}
+
+.btn{
+  background:var(--panel-2);border:1px solid var(--edge-2);color:var(--ink);
+  padding:.4rem .7rem;border-radius:var(--r-sm);cursor:pointer;font-size:.85rem;
+}
+.btn:hover{border-color:var(--amber);color:var(--amber)}
+.btn-amber{background:var(--amber);color:#241a04;border-color:var(--amber);font-weight:600}
+.btn-amber:hover{filter:brightness(1.08);color:#241a04}
+
+/* ---------- area (rectangle) editor ---------- */
+.areas{display:flex;flex-direction:column;gap:.45rem}
+.area-row{
+  display:grid;grid-template-columns:20px repeat(4,1fr) 24px;
+  gap:.3rem;align-items:center;
+}
+.area-row .tag{
+  font-family:"Bricolage Grotesque";font-weight:800;font-size:.9rem;
+  color:var(--amber);text-align:center;
+}
+.area-row input{padding:.34rem .3rem;font-size:.82rem;text-align:center}
+.area-head{
+  display:grid;grid-template-columns:20px repeat(4,1fr) 24px;gap:.3rem;
+  font-size:.7rem;color:var(--ink-dim);text-align:center;margin-bottom:.15rem;
+}
+.x-btn{
+  background:none;border:0;color:var(--ink-dim);cursor:pointer;font-size:1rem;line-height:1;padding:2px;
+}
+.x-btn:hover{color:var(--alert)}
+.presets{display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.6rem}
+.hint{margin:.55rem 0 0;font-size:.76rem;color:var(--ink-dim);line-height:1.45}
+.set-out{margin-top:.7rem}
+.money{display:flex;align-items:center;gap:.35rem}
+.money > span{font-family:"IBM Plex Mono",monospace;color:var(--ink-dim);font-size:.9rem}
+.presets .btn{padding:.28rem .55rem;font-size:.78rem}
+
+/* ---------- direction + corner pickers ---------- */
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
+.seg button{
+  display:flex;flex-direction:column;align-items:center;gap:.35rem;
+  background:var(--panel-2);border:1px solid var(--edge);border-radius:var(--r-md);
+  padding:.5rem .3rem;cursor:pointer;font-size:.76rem;color:var(--ink-dim);
+}
+.seg button svg{display:block}
+.seg button[aria-pressed=true]{border-color:var(--amber);color:var(--ink);background:#3a4a41}
+.corner-grid{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
+
+/* ---------- drawing ---------- */
+.plan-wrap{
+  position:relative;
+  background:var(--mat-2);
+  border:1px solid var(--edge);
+  border-radius:var(--r-md);
+  padding:.8rem;
+  box-shadow:var(--shadow);
+}
+#plan{width:100%;height:auto;display:block;touch-action:manipulation}
+#plan rect.piece{cursor:crosshair}
+#plan rect.piece:hover{filter:brightness(1.18)}
+
+.tip{
+  position:absolute;pointer-events:none;opacity:0;transition:opacity .12s;
+  background:#121916;border:1px solid var(--edge-2);border-radius:var(--r-sm);
+  padding:.35rem .5rem;font-family:"IBM Plex Mono",monospace;font-size:.75rem;
+  white-space:nowrap;z-index:5;transform:translate(-50%,-130%);
+}
+.tip.on{opacity:1}
+
+.legend{display:flex;flex-wrap:wrap;gap:.9rem;margin-top:.7rem;font-size:.78rem;color:var(--ink-dim)}
+.legend i{display:inline-block;width:14px;height:10px;border-radius:1px;margin-right:.35rem;vertical-align:middle;border:1px solid var(--oak-edge)}
+
+/* ---------- results ---------- */
+.results{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));
+  gap:1px;background:var(--edge);border:1px solid var(--edge);
+  border-radius:var(--r-md);overflow:hidden;margin-top:1.1rem;
+}
+.stat{background:var(--panel);padding:.7rem .8rem}
+.stat b{display:block;font-family:"IBM Plex Mono",monospace;font-size:1.28rem;font-weight:500;line-height:1.25}
+.stat span{font-size:.75rem;color:var(--ink-dim)}
+.stat.key b{color:var(--amber)}
+
+.notes{margin-top:1rem;display:flex;flex-direction:column;gap:.45rem}
+.note{
+  display:flex;gap:.55rem;align-items:flex-start;
+  font-size:.85rem;padding:.5rem .65rem;border-radius:var(--r-sm);
+  background:var(--panel);border-left:3px solid var(--ink-dim);color:var(--ink-dim);
+}
+.note.warn{border-left-color:var(--alert);color:#F0D5CD;background:#332723}
+.note b{color:var(--ink);font-weight:600}
+
+/* ---------- cut list ---------- */
+details.cuts{margin-top:1.1rem;border:1px solid var(--edge);border-radius:var(--r-md);background:var(--panel);overflow:hidden}
+details.cuts > summary{padding:.6rem .8rem;cursor:pointer;font-weight:600;font-size:.9rem;list-style:none;display:flex;justify-content:space-between;align-items:center}
+details.cuts > summary::-webkit-details-marker{display:none}
+details.cuts > summary::after{content:"+";color:var(--amber);font-family:"IBM Plex Mono"}
+details.cuts[open] > summary::after{content:"–"}
+.cuts-body{padding:0 .8rem .9rem;font-family:"IBM Plex Mono",monospace;font-size:.8rem}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:.3rem .4rem;border-bottom:1px solid var(--edge);vertical-align:top}
+th{color:var(--ink-dim);font-weight:400;font-size:.72rem;font-family:"IBM Plex Sans"}
+td.row-no{color:var(--ink-dim);width:3rem}
+.pill{display:inline-block;padding:0 .3rem;border-radius:2px;margin:1px 2px 1px 0}
+.pill.full{background:rgba(217,179,130,.18);color:var(--oak)}
+.pill.cut{background:rgba(192,134,83,.24);color:#e0a877}
+.pill.reuse{background:rgba(134,174,142,.22);color:var(--sage)}
+
+.foot{margin-top:1.4rem;font-size:.78rem;color:var(--ink-dim);max-width:64ch}
+.foot a{color:var(--amber)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wordmark">
+    <h1>Plank Plan</h1>
+  </div>
+  <input id="plan-name" class="plan-name" type="text" maxlength="80"
+         aria-label="Plan name" value="Untitled plan">
+  <div class="topbar-right">
+    <div class="tools">
+      <button class="btn" id="new-plan">New</button>
+      <button class="btn" id="save-plan">Save</button>
+      <button class="btn" id="load-plan">Load</button>
+      <input type="file" id="load-file" accept="application/json,.json" hidden>
+    </div>
+    <div class="headline">
+      <b id="hl-planks">—</b><em id="hl-sub">planks</em>
+    </div>
+  </div>
+</header>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<div class="shell">
+
+  <!-- ================= CONTROL RAIL ================= -->
+  <aside class="rail">
+
+    <section class="sec">
+      <h2>Room shape <small id="unit-note">mm</small></h2>
+      <div class="field">
+        <label for="units">Enter room dimensions in</label>
+        <select id="units">
+          <option value="mm" selected>Millimetres</option>
+          <option value="m">Metres</option>
+        </select>
+      </div>
+      <div class="area-head"><span></span><span>X</span><span>Y</span><span>Width</span><span>Depth</span><span></span></div>
+      <div class="areas" id="areas"></div>
+      <div class="presets">
+        <button class="btn" data-preset="single">Single rectangle</button>
+        <button class="btn" data-preset="l">L-shape</button>
+        <button class="btn" data-preset="t">T-shape</button>
+        <button class="btn" data-preset="alcove">Room + alcove</button>
+        <button class="btn btn-amber" id="add-area">Add area</button>
+      </div>
+    </section>
+
+    <section class="sec">
+      <h2>Plank size <small>mm</small></h2>
+      <div class="pair">
+        <div class="field"><label for="plankL">Length</label><input type="number" id="plankL" value="1285" min="100" step="1"></div>
+        <div class="field"><label for="plankW">Width</label><input type="number" id="plankW" value="192" min="20" step="1"></div>
+      </div>
+      <div class="field"><label for="perPack">Planks per pack</label><input type="number" id="perPack" value="8" min="1" step="1"></div>
+    </section>
+
+    <section class="sec">
+      <h2>Pattern</h2>
+      <div class="seg" id="pattern"></div>
+      <p class="hint" id="ratio-hint"></p>
+    </section>
+
+    <section class="sec">
+      <h2 id="dir-head">Direction</h2>
+      <div class="seg" id="dir"></div>
+    </section>
+
+    <section class="sec">
+      <h2 id="corner-head">Starting corner <small id="corner-sub">full plank here</small></h2>
+      <div class="corner-grid" id="corner"></div>
+      <div class="pair set-out">
+        <div class="field"><label for="originX">Set-out X</label>
+          <input type="number" id="originX" value="0" min="0" step="10"></div>
+        <div class="field"><label for="originY">Set-out Y</label>
+          <input type="number" id="originY" value="0" min="0" step="10"></div>
+      </div>
+      <div class="presets">
+        <button class="btn" id="balance">Balance edge rows</button>
+        <button class="btn" id="reset-origin">Back to the corner</button>
+      </div>
+      <p class="hint" id="origin-hint"></p>
+    </section>
+
+    <section class="sec">
+      <h2>Fitting <small>mm</small></h2>
+      <div class="field" id="stagger-field">
+        <label for="stagger">Stagger — how far each row shifts</label>
+        <input type="number" id="stagger" value="300" min="0" step="10">
+      </div>
+      <label class="check"><input type="checkbox" id="reuse" checked>
+        <span id="reuse-label">Start rows with the previous offcut</span></label>
+      <div class="field">
+        <label for="minOff">Shortest offcut worth keeping</label>
+        <input type="number" id="minOff" value="300" min="0" step="10">
+      </div>
+      <div class="field">
+        <label for="extra">Extra allowance for damage and mistakes (%)</label>
+        <input type="number" id="extra" value="10" min="0" max="50" step="1">
+      </div>
+    </section>
+
+    <section class="sec">
+      <h2>Price <small>optional</small></h2>
+      <div class="pair">
+        <div class="field">
+          <label for="priceBasis">Priced by</label>
+          <select id="priceBasis">
+            <option value="pack" selected>Pack</option>
+            <option value="plank">Plank</option>
+            <option value="m2">Square metre</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="price">Amount</label>
+          <div class="money"><span id="cur-sym">$</span>
+            <input type="number" id="price" value="0" min="0" step="0.01"></div>
+        </div>
+      </div>
+      <div class="field">
+        <label for="currency">Currency symbol</label>
+        <input type="text" id="currency" value="$" maxlength="4">
+      </div>
+    </section>
+
+    <section class="sec">
+      <h2>Plan text <small>if downloads are blocked</small></h2>
+      <textarea id="plan-text" spellcheck="false" aria-label="Plan as text"></textarea>
+      <div class="presets">
+        <button class="btn" id="copy-text">Copy</button>
+        <button class="btn" id="apply-text">Apply pasted plan</button>
+      </div>
+      <p class="hint">Save writes a .json file you can keep with the job or send on. This box holds
+        the same thing as text, for pasting into a message or loading it back by hand.</p>
+    </section>
+
+  </aside>
+
+  <!-- ================= WORK AREA ================= -->
+  <main class="work">
+    <div class="plan-wrap">
+      <svg id="plan" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="tip" id="tip"></div>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--oak)"></i>Full plank</span>
+      <span><i style="background:var(--oak-cut)"></i>Cut from a new plank</span>
+      <span><i style="background:var(--sage);border-color:#5e8a68"></i>Cut from a saved offcut</span>
+      <span id="hover-hint">Hover or tap a piece for its size</span>
+    </div>
+
+    <div class="results" id="results"></div>
+    <div class="notes" id="notes"></div>
+
+    <details class="cuts">
+      <summary>Cut list <span id="cut-count" style="color:var(--ink-dim);font-weight:400"></span></summary>
+      <div class="cuts-body">
+        <div id="cut-summary" style="margin:.4rem 0 .9rem"></div>
+        <div id="cut-table">
+          <table><thead><tr><th>Row</th><th>Pieces, in laying order (mm)</th></tr></thead>
+          <tbody id="cut-rows"></tbody></table>
+        </div>
+      </div>
+    </details>
+
+    <p class="foot">
+      Lengths are the finished sizes you need on the floor. Leave your 8–10&nbsp;mm expansion gap
+      inside these figures — the gap is small enough that it is covered by the extra allowance rather
+      than deducted. Always dry-lay the first two rows before you glue or click anything down.
+    </p>
+  </main>
+</div>
+
+<script>
+"use strict";
+/* ================================================================
+   PLANK PLAN
+   Works out how many laminate planks a room needs by simulating the
+   actual layout, piece by piece, rather than dividing areas.
+
+   The room is a union of axis-aligned rectangles, so L-shapes,
+   T-shapes and alcoves all work.
+   ================================================================ */
+
+/* ENGINE:START — everything between these markers must stay free of DOM access.
+   tests/engine.test.mjs slices this block straight out of the file and runs it
+   in Node. If you move or rename the markers, update the test too. */
+
+const EPS = 1e-6;
+
+const PRESETS = {
+  single:[{x:0,y:0,w:4800,h:3600}],
+  l:     [{x:0,y:0,w:5000,h:3200},{x:0,y:3200,w:2600,h:1500}],
+  t:     [{x:0,y:0,w:5400,h:2400},{x:1600,y:2400,w:2200,h:2300}],
+  alcove:[{x:0,y:0,w:4200,h:3400},{x:4200,y:800,w:1300,h:1800}]
+};
+
+/* ---------- saved plans -----------------------------------------
+   A plan is the whole of the user's input and nothing else — no
+   derived results, which are cheap to recompute and would only go
+   stale in a file. Saving is a plain JSON download; loading takes a
+   file from anywhere, so everything read out of one is treated as
+   hostile until proved otherwise.
+   ---------------------------------------------------------------- */
+const PLAN_FORMAT = "plank-plan";
+const PLAN_VERSION = 1;
+const MAX_AREAS = 40;
+
+function defaultPlan(){
+  return {
+    name: "Untitled plan",
+    units: "mm",
+    rects: PRESETS.l.map(r => ({...r})),
+    plankL: 1285, plankW: 192, perPack: 8,
+    pattern: "straight", dir: "h", hbAngle: 45, corner: "tl",
+    originX: 0, originY: 0,   // set-out point, measured in from that corner
+    stagger: 300, reuse: true, minOff: 300, extra: 10,
+    priceBasis: "pack", price: 0, currency: "$"
+  };
+}
+
+/** The saved-file wrapper: a format tag, a version, and the plan itself. */
+function serialisePlan(st){
+  const d = defaultPlan();
+  const plan = {};
+  for(const k of Object.keys(d)) plan[k] = st[k] !== undefined ? st[k] : d[k];
+  plan.rects = (st.rects || d.rects).map(r => ({x:r.x, y:r.y, w:r.w, h:r.h}));
+  return { format: PLAN_FORMAT, version: PLAN_VERSION, saved: new Date().toISOString(), plan };
+}
+
+/**
+ * Turn anything at all into a usable plan.
+ *
+ * Every field is checked against the defaults rather than trusted, so a
+ * truncated, hand-edited or entirely unrelated JSON file loads into
+ * something sensible instead of breaking the page. Returns the plan plus
+ * any warnings worth showing the user.
+ */
+function sanitisePlan(raw){
+  const d = defaultPlan();
+  const warnings = [];
+  if(!raw || typeof raw !== "object" || Array.isArray(raw)){
+    return { plan:d, warnings:["That file did not contain a plan, so nothing changed."], ok:false };
+  }
+  const body = (raw.plan && typeof raw.plan === "object") ? raw.plan : raw;
+  if(raw.format && raw.format !== PLAN_FORMAT){
+    warnings.push(`That file says it was written by "${String(raw.format).slice(0,30)}". ` +
+                  `Whatever could be read has been loaded.`);
+  }
+  if(raw.version && Number(raw.version) > PLAN_VERSION){
+    warnings.push("That plan was saved by a newer version, so some settings may be missing.");
+  }
+
+  const num = (v, lo, hi, fb) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fb;
+  };
+  const pick = (v, allowed, fb) => allowed.includes(v) ? v : fb;
+  const text = (v, max, fb) =>
+    (typeof v === "string" && v.trim()) ? v.trim().slice(0, max) : fb;
+
+  const plan = {
+    name:       text(body.name, 80, d.name),
+    units:      pick(body.units, ["mm","m"], d.units),
+    rects:      [],
+    plankL:     num(body.plankL, 100, 5000, d.plankL),
+    plankW:     num(body.plankW, 20, 2000, d.plankW),
+    perPack:    Math.round(num(body.perPack, 1, 500, d.perPack)),
+    pattern:    pick(body.pattern, ["straight","herringbone"], d.pattern),
+    dir:        pick(body.dir, ["h","v"], d.dir),
+    hbAngle:    pick(Number(body.hbAngle), [0,45,90,135], d.hbAngle),
+    corner:     pick(body.corner, ["tl","tr","bl","br"], d.corner),
+    originX:    num(body.originX, -5000, 5000, d.originX),
+    originY:    num(body.originY, -5000, 5000, d.originY),
+    stagger:    num(body.stagger, 0, 5000, d.stagger),
+    reuse:      typeof body.reuse === "boolean" ? body.reuse : d.reuse,
+    minOff:     num(body.minOff, 0, 5000, d.minOff),
+    extra:      num(body.extra, 0, 100, d.extra),
+    priceBasis: pick(body.priceBasis, ["pack","plank","m2"], d.priceBasis),
+    price:      num(body.price, 0, 1e7, d.price),
+    currency:   text(body.currency, 4, d.currency)
+  };
+
+  if(Array.isArray(body.rects)){
+    let dropped = 0;
+    for(const r of body.rects.slice(0, MAX_AREAS)){
+      const x = Number(r && r.x), y = Number(r && r.y);
+      const w = Number(r && r.w), h = Number(r && r.h);
+      const sane = [x,y,w,h].every(Number.isFinite) && w > 0 && h > 0 &&
+                   Math.abs(x) <= 1e6 && Math.abs(y) <= 1e6 && w <= 1e6 && h <= 1e6;
+      if(sane) plan.rects.push({x,y,w,h}); else dropped++;
+    }
+    if(dropped) warnings.push(`${dropped} area${dropped===1?" was":"s were"} unreadable and skipped.`);
+    if(body.rects.length > MAX_AREAS){
+      warnings.push(`Only the first ${MAX_AREAS} areas were loaded.`);
+    }
+  }
+  if(!plan.rects.length){
+    plan.rects = d.rects;
+    // An absent rects field is just a missing setting, like any other. Only
+    // say the room was reset when areas were offered and none of them worked.
+    if(Array.isArray(body.rects)){
+      warnings.push("There were no usable areas in that plan, so the room was reset.");
+    }
+  }
+  return { plan, warnings, ok:true };
+}
+
+/* ---------- small geometry helpers ------------------------------ */
+
+/** Merge a list of [start,end] intervals into non-overlapping ones. */
+function unionIntervals(list){
+  if(!list.length) return [];
+  const s = list.slice().sort((a,b)=>a[0]-b[0]);
+  const out = [s[0].slice()];
+  for(let i=1;i<s.length;i++){
+    const cur = out[out.length-1];
+    if(s[i][0] <= cur[1] + EPS) cur[1] = Math.max(cur[1], s[i][1]);
+    else out.push(s[i].slice());
+  }
+  return out;
+}
+
+/** Bounding box of a set of rectangles. */
+function bboxOf(rects){
+  const x0 = Math.min(...rects.map(r=>r.x));
+  const y0 = Math.min(...rects.map(r=>r.y));
+  const x1 = Math.max(...rects.map(r=>r.x+r.w));
+  const y1 = Math.max(...rects.map(r=>r.y+r.h));
+  return {x:x0, y:y0, w:x1-x0, h:y1-y0};
+}
+
+/**
+ * Split a union of rectangles into non-overlapping ones by sweeping
+ * vertical strips between every distinct x edge. Overlapping input is
+ * fine — each part of the floor comes out exactly once, which is what
+ * both the area sum and the herringbone clipper rely on.
+ */
+function disjointRects(rects){
+  if(!rects.length) return [];
+  const xs = [...new Set(rects.flatMap(r=>[r.x, r.x+r.w]))].sort((a,b)=>a-b);
+  const out = [];
+  for(let i=0;i<xs.length-1;i++){
+    const x0 = xs[i], x1 = xs[i+1];
+    if(x1-x0 <= EPS) continue;
+    const spans = rects.filter(r => r.x <= x0+EPS && r.x+r.w >= x1-EPS)
+                       .map(r => [r.y, r.y+r.h]);
+    for(const [a,b] of unionIntervals(spans)) out.push({x:x0, y:a, w:x1-x0, h:b-a});
+  }
+  return out;
+}
+
+/** True area of a union of rectangles, overlaps counted once. */
+function unionArea(rects){
+  return disjointRects(rects).reduce((s,r) => s + r.w*r.h, 0);
+}
+
+/** Shoelace area of a simple polygon given as [{x,y},...]. */
+function polyArea(p){
+  let a = 0;
+  for(let i=0;i<p.length;i++){
+    const q = p[(i+1) % p.length];
+    a += p[i].x*q.y - q.x*p[i].y;
+  }
+  return Math.abs(a)/2;
+}
+
+/**
+ * Sutherland–Hodgman: clip a convex polygon to a rectangle.
+ * Used to work out how much of a rotated herringbone plank actually
+ * lands on the floor. Returns [] when nothing does.
+ */
+function clipToRect(poly, rect){
+  const limits = [
+    {axis:"x", val:rect.x,          inside:p => p.x >= rect.x - EPS},
+    {axis:"x", val:rect.x+rect.w,   inside:p => p.x <= rect.x+rect.w + EPS},
+    {axis:"y", val:rect.y,          inside:p => p.y >= rect.y - EPS},
+    {axis:"y", val:rect.y+rect.h,   inside:p => p.y <= rect.y+rect.h + EPS}
+  ];
+  let out = poly;
+  for(const lim of limits){
+    if(out.length < 3) return [];
+    const inp = out; out = [];
+    for(let i=0;i<inp.length;i++){
+      const a = inp[i], b = inp[(i+1) % inp.length];
+      const ain = lim.inside(a), bin = lim.inside(b);
+      if(ain) out.push(a);
+      if(ain !== bin){
+        // The two points straddle the edge, so the denominator is non-zero.
+        const t = (lim.val - a[lim.axis]) / (b[lim.axis] - a[lim.axis]);
+        out.push({x: a.x + t*(b.x-a.x), y: a.y + t*(b.y-a.y)});
+      }
+    }
+  }
+  return out.length >= 3 ? out : [];
+}
+
+/* ---------- coordinate transform -------------------------------
+   All the layout maths is done in "plank space", where planks always
+   run left to right and the first row is laid along the top edge
+   starting at the top-left corner.
+
+   Real space is mapped into plank space by, at most, swapping the
+   axes (for vertical planks) then mirroring. Both operations are
+   their own inverse, which makes drawing easy.
+   ---------------------------------------------------------------- */
+function makeTransform(rects, dir, corner){
+  const swap = (dir === "v");
+  const right  = (corner === "tr" || corner === "br");
+  const bottom = (corner === "bl" || corner === "br");
+  // After swapping axes, "right" becomes "down" and "bottom" becomes "across".
+  const mirrorX = swap ? bottom : right;
+  const mirrorY = swap ? right  : bottom;
+
+  const sw = r => swap ? {x:r.y, y:r.x, w:r.h, h:r.w} : {x:r.x, y:r.y, w:r.w, h:r.h};
+  const bb = bboxOf(rects.map(sw));   // bounding box in swapped space
+
+  const mir = r => ({
+    x: mirrorX ? (2*bb.x + bb.w - r.x - r.w) : r.x,
+    y: mirrorY ? (2*bb.y + bb.h - r.y - r.h) : r.y,
+    w: r.w, h: r.h
+  });
+
+  return {
+    bb,
+    toPlank:  r => mir(sw(r)),   // real  -> plank space
+    toReal:   r => sw(mir(r))    // plank -> real space
+  };
+}
+
+/* ---------- shared material accounting ---------------------------
+   Walk the pieces in laying order. A full piece always needs a fresh
+   plank. A part piece takes the smallest saved offcut that fits, and
+   failing that a new plank, with the remainder returned to the pile if
+   it clears the minimum worth keeping. Best fit rather than first fit,
+   so the long offcuts stay available for the long cuts still to come.
+
+   `size(piece)` is a length for straight rows and an area for
+   herringbone; `whole` is the matching size of an uncut plank.
+   ---------------------------------------------------------------- */
+function consume(pieces, whole, minKeep, reuse){
+  const pool = [];
+  let planksUsed = 0, cutCount = 0, offcutSaves = 0;
+
+  for(const p of pieces){
+    if(p.full){ planksUsed++; continue; }
+    cutCount++;
+    let best = -1, bestSize = Infinity;
+    if(reuse){
+      for(let i=0;i<pool.length;i++){
+        if(pool[i] >= p.size - EPS && pool[i] < bestSize){ bestSize = pool[i]; best = i; }
+      }
+    }
+    if(best >= 0){
+      pool.splice(best,1);
+      p.source = "offcut";
+      offcutSaves++;
+      const rem = bestSize - p.size;
+      if(rem >= minKeep - EPS && rem > EPS) pool.push(rem);
+    } else {
+      planksUsed++;
+      p.source = "new";
+      const rem = whole - p.size;
+      if(reuse && rem >= minKeep - EPS && rem > EPS) pool.push(rem);
+    }
+  }
+  return { planksUsed, cutCount, offcutSaves, pool:pool.sort((a,b)=>b-a) };
+}
+
+/* ---------- totals shared by both patterns ---------------------- */
+function tally(st, base){
+  const { planksUsed } = base;
+  const withExtra = Math.ceil(planksUsed * (1 + st.extra/100));
+  const packs     = st.perPack > 0 ? Math.ceil(withExtra/st.perPack) : 0;
+  // You take home whole packs, so that is what you pay for.
+  const bought    = st.perPack > 0 ? packs*st.perPack : withExtra;
+  const plankArea = st.plankL * st.plankW / 1e6;
+  const price     = Math.max(0, st.price || 0);
+
+  let cost = 0;
+  if(price > 0){
+    if(st.priceBasis === "pack")  cost = packs * price;
+    if(st.priceBasis === "plank") cost = bought * price;
+    if(st.priceBasis === "m2")    cost = bought * plankArea * price;
+  }
+  const floorArea  = base.floorArea;
+  const boughtArea = planksUsed * plankArea;
+  return {
+    ...base, withExtra, packs, planksBought:bought, cost,
+    costPerM2: floorArea > 0 ? cost/floorArea : 0,
+    boughtArea,
+    wastePct: boughtArea > 0 ? (1 - floorArea/boughtArea)*100 : 0
+  };
+}
+
+/* ---------- herringbone ------------------------------------------
+   Planks alternate between two perpendicular orientations. The whole
+   pattern is one lattice:
+
+       base = i*(L, L) + j*(-W, W)
+       a plank of L x W sits at base
+       a plank of W x L sits at base + (L, 0)
+
+   The determinant of those lattice vectors is exactly 2*L*W, the area
+   of the two planks, so it tiles the plane with no gaps or overlaps at
+   any length-to-width ratio. The whole lattice is then rotated about
+   the anchor corner, which is why the drawing can hand the rotation
+   straight to SVG rather than transforming every plank itself.
+   ---------------------------------------------------------------- */
+function computeHerringbone(st){
+  const L = st.plankL, W = st.plankW, whole = L*W;
+  const bb  = bboxOf(st.rects);
+  const deg = st.hbAngle;
+  const th  = deg*Math.PI/180, cos = Math.cos(th), sin = Math.sin(th);
+
+  // The pattern is pinned to one corner of the room, chosen by the user.
+  // The set-out point moves in from that corner, in room coordinates.
+  const oX = st.originX || 0, oY = st.originY || 0;
+  const ax = (st.corner === "tr" || st.corner === "br") ? bb.x+bb.w - oX : bb.x + oX;
+  const ay = (st.corner === "bl" || st.corner === "br") ? bb.y+bb.h - oY : bb.y + oY;
+  const toRoom = p => ({x: ax + p.x*cos - p.y*sin, y: ay + p.x*sin + p.y*cos});
+  const toPat  = p => {
+    const dx = p.x-ax, dy = p.y-ay;
+    return {x: dx*cos + dy*sin, y: -dx*sin + dy*cos};
+  };
+
+  // Room bounds in pattern space, padded so planks straddling the edge
+  // are still generated.
+  const pad = L + W;
+  const cs = [[bb.x,bb.y],[bb.x+bb.w,bb.y],[bb.x,bb.y+bb.h],[bb.x+bb.w,bb.y+bb.h]]
+    .map(([x,y]) => toPat({x,y}));
+  const xLo = Math.min(...cs.map(c=>c.x)) - pad, xHi = Math.max(...cs.map(c=>c.x)) + pad;
+  const yLo = Math.min(...cs.map(c=>c.y)) - pad, yHi = Math.max(...cs.map(c=>c.y)) + pad;
+
+  // Inverting the lattice: i = (x+y)/2L and j = (y-x)/2W, both monotone,
+  // so the extremes over the four corners bound the index range exactly.
+  const idx = [];
+  for(const x of [xLo,xHi]) for(const y of [yLo,yHi]) idx.push([(x+y)/(2*L), (y-x)/(2*W)]);
+  const i0 = Math.floor(Math.min(...idx.map(v=>v[0]))), i1 = Math.ceil(Math.max(...idx.map(v=>v[0])));
+  const j0 = Math.floor(Math.min(...idx.map(v=>v[1]))), j1 = Math.ceil(Math.max(...idx.map(v=>v[1])));
+
+  if((i1-i0+1) * (j1-j0+1) * 2 > 120000) return { overflow:true, bb };
+
+  const parts  = disjointRects(st.rects);
+  const pieces = [];
+  // Where the lattice merely grazes a wall it leaves a sliver too small to
+  // be a piece of flooring. Those are dropped, but the area is kept so the
+  // tiling can still be checked for gaps and overlaps.
+  let sliverArea = 0;
+
+  for(let i=i0;i<=i1;i++){
+    for(let j=j0;j<=j1;j++){
+      const bx = i*L - j*W, by = i*L + j*W;
+      for(const turned of [false, true]){
+        const rw = turned ? W : L, rh = turned ? L : W;
+        const rx = turned ? bx + L : bx, ry = by;
+        const quad = [{x:rx,y:ry},{x:rx+rw,y:ry},{x:rx+rw,y:ry+rh},{x:rx,y:ry+rh}].map(toRoom);
+
+        let area = 0;
+        for(const part of parts){
+          const c = clipToRect(quad, part);
+          if(c.length >= 3) area += polyArea(c);
+        }
+        if(area <= whole*5e-4){ sliverArea += area; continue; }
+
+        pieces.push({
+          size: area, area, full: area >= whole - Math.max(1, whole*1e-4),
+          source: "new", turned,
+          rot: {x:rx, y:ry, w:rw, h:rh}
+        });
+      }
+    }
+  }
+
+  // Border pieces in herringbone come off the wall at an angle, and the
+  // two pieces of a plank cut on a wall line fit opposite walls. Pairing
+  // them by area is an estimate, which the notes say plainly.
+  const acc = consume(pieces, whole, W*st.minOff, st.reuse);
+
+  return tally(st, {
+    mode:"herringbone", pieces, rows:[], rowCount:0, ripRows:0,
+    bb, deg, anchor:{ax, ay}, sliverArea,
+    floorArea: unionArea(st.rects)/1e6,
+    lastRowDepth: null, stagger: 0,
+    ...acc, leftoverPool: acc.pool
+  });
+}
+
+/* ---------- the layout engine ----------------------------------- */
+function computeLayout(st){
+  if(!st.rects.length || st.plankL <= 0 || st.plankW <= 0) return null;
+  return st.pattern === "herringbone" ? computeHerringbone(st) : computeStraight(st);
+}
+
+function computeStraight(st){
+  const { rects, plankL, plankW } = st;
+  const T  = makeTransform(rects, st.dir, st.corner);
+  const pr = rects.map(T.toPlank);
+  const bb = T.bb;
+
+  const stagger = plankL > 0 ? ((st.stagger % plankL) + plankL) % plankL : 0;
+
+  // The set-out point is given in room coordinates as a distance in from the
+  // starting corner. Plank space has already put that corner at the origin and
+  // pointed the planks along +x, so the offset only needs its axes swapped
+  // when the planks run the other way.
+  const oAlong  = st.dir === "v" ? (st.originY || 0) : (st.originX || 0);
+  const oAcross = st.dir === "v" ? (st.originX || 0) : (st.originY || 0);
+
+  // Rows are indexed from the set-out point, so k runs negative into the strip
+  // between it and the wall. Row 1 in the cut list is still the one at the wall.
+  const rowStart = bb.y + oAcross;
+  const kLo = Math.floor((bb.y - rowStart)/plankW + EPS);
+  const kHi = Math.ceil((bb.y + bb.h - rowStart)/plankW - EPS) - 1;
+  const rowCount = Math.max(1, kHi - kLo + 1);
+
+  // Sanity guard. A dimension typed in the wrong unit can ask for millions of
+  // pieces, which would lock the page up, so bail out with a readable message.
+  const estPieces = rowCount * (Math.ceil(bb.w/plankL) + 2);
+  if(!isFinite(estPieces) || estPieces > 40000) return { overflow:true, bb };
+
+  const pieces = [];          // every piece of material on the floor
+  const rows   = [];          // per-row bookkeeping, for the cut list and warnings
+  let ripRows  = 0;           // rows that need a lengthwise (rip) cut
+
+  for(let k=kLo;k<=kHi;k++){
+    const i  = k - kLo;       // display order, counting from the wall
+    const y0 = rowStart + k*plankW;
+    const y1 = y0 + plankW;
+
+    // Which parts of this band actually have floor under them?
+    const covered = unionIntervals(
+      pr.filter(r => r.y < y1 - EPS && r.y + r.h > y0 + EPS)
+        .map(r => [r.x, r.x + r.w])
+    );
+    if(!covered.length){ rows.push({index:i, y0, pieces:[]}); continue; }
+
+    // Rip check: does the floor fill the full depth of this band everywhere?
+    const clipped = pr.map(r => ({
+      x:r.x, w:r.w,
+      y:Math.max(r.y,y0),
+      h:Math.min(r.y+r.h,y1) - Math.max(r.y,y0)
+    })).filter(r => r.h > EPS);
+    const bandWidth = covered.reduce((s,[a,b]) => s + (b-a), 0);
+    if(unionArea(clipped) < bandWidth*plankW - 1) ripRows++;
+
+    // The plank grid for this row: an infinite repeat of plankL, shifted by
+    // the stagger so each row starts a little further along, and by the set-out
+    // point so the whole pattern can be slid along the row.
+    const g = bb.x + oAlong + (((k*stagger) % plankL) + plankL) % plankL;
+    const rowPieces = [];
+
+    for(const [a,b] of covered){
+      const kFrom = Math.floor((a - g)/plankL + EPS);
+      const kTo   = Math.ceil ((b - g)/plankL - EPS) - 1;
+      for(let k=kFrom;k<=kTo;k++){
+        const px0 = Math.max(a, g + k*plankL);
+        const px1 = Math.min(b, g + (k+1)*plankL);
+        const len = px1 - px0;
+        if(len <= EPS) continue;
+        const piece = {
+          row:i, x:px0, y:y0, w:len, h:plankW,
+          size: len,                       // straight rows are measured by length
+          full: len >= plankL - EPS,
+          source:"new"
+        };
+        pieces.push(piece);
+        rowPieces.push(piece);
+      }
+    }
+    rows.push({index:i, y0, pieces:rowPieces});
+  }
+
+  const acc = consume(pieces, plankL, st.minOff, st.reuse);
+
+  return tally(st, {
+    mode:"straight", T, bb, pieces, rows, rowCount, ripRows, stagger,
+    floorArea: unionArea(rects)/1e6,
+    firstRowDepth: Math.min(plankW, rowStart + (kLo+1)*plankW - bb.y),
+    lastRowDepth:  Math.min(plankW, bb.y + bb.h - (rowStart + kHi*plankW)),
+    ...acc, leftoverPool: acc.pool
+  });
+}
+
+/* ENGINE:END */
+
+/* ---------- state ----------------------------------------------
+   Everything in defaultPlan() is saved and loaded; anything added
+   here on top of it is transient and deliberately not.            */
+const state = {
+  ...defaultPlan(),
+  focusRect: -1           // index of the rectangle being edited, for highlighting
+};
+
+/* ---------- formatting ------------------------------------------ */
+const mm  = v => Math.round(v).toLocaleString();
+const money = v => state.currency + v.toLocaleString(undefined,
+  {minimumFractionDigits:2, maximumFractionDigits:2});
+const m2  = v => v.toFixed(2);
+const toDisplay = v => state.units === "m" ? +(v/1000).toFixed(3) : Math.round(v);
+const fromDisplay = v => state.units === "m" ? v*1000 : v;
+
+/* ================================================================
+   RENDERING
+   ================================================================ */
+
+/* ---- the plan drawing ---- */
+function drawPlan(L){
+  const svg = document.getElementById("plan");
+  svg.innerHTML = "";
+  if(!L || L.overflow){ svg.setAttribute("viewBox","0 0 100 60"); return; }
+
+  const bbReal = bboxOf(state.rects);
+  const pad    = Math.max(bbReal.w, bbReal.h) * 0.12 + 150;
+  svg.setAttribute("viewBox",
+    `${bbReal.x-pad} ${bbReal.y-pad} ${bbReal.w+pad*2} ${bbReal.h+pad*2}`);
+  svg.setAttribute("preserveAspectRatio","xMidYMid meet");
+
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, parent) => {
+    const n = document.createElementNS(NS, tag);
+    for(const k in attrs) n.setAttribute(k, attrs[k]);
+    (parent || svg).appendChild(n);
+    return n;
+  };
+  const unit = Math.max(bbReal.w, bbReal.h);
+  const fs   = unit/55;                       // label size in drawing units
+
+  // Clip everything to the true floor outline so planks stop at the walls.
+  const defs = el("defs",{});
+  const clip = el("clipPath",{id:"floor"},defs);
+  state.rects.forEach(r => el("rect",{x:r.x,y:r.y,width:r.w,height:r.h},clip));
+
+  // Floor slab under the planks.
+  const slab = el("g",{});
+  state.rects.forEach((r,i) => el("rect",{
+    x:r.x, y:r.y, width:r.w, height:r.h,
+    fill: state.focusRect === i ? "#3d5045" : "#31403a"
+  }, slab));
+
+  // Planks. The clip lives on an untransformed group so the herringbone
+  // rotation underneath it cannot drag the room outline around with it.
+  const layer = el("g",{"clip-path":"url(#floor)"});
+  const seed  = (n) => { const s = Math.sin(n*12.9898)*43758.5453; return s - Math.floor(s); };
+
+  if(L.mode === "herringbone"){
+    // Every plank is placed in pattern space, so one group transform
+    // puts the whole lattice on the floor at the right angle.
+    const field = el("g",
+      {transform:`translate(${L.anchor.ax} ${L.anchor.ay}) rotate(${L.deg})`}, layer);
+    L.pieces.forEach((p,i) => {
+      const r = p.rot;
+      const node = el("rect",{
+        class:"piece", x:r.x, y:r.y, width:r.w, height:r.h,
+        fill: p.full ? "var(--oak)" : (p.source === "offcut" ? "var(--sage)" : "var(--oak-cut)"),
+        stroke:"var(--oak-edge)", "stroke-width":1, "vector-effect":"non-scaling-stroke"
+      }, field);
+      node.dataset.info = p.full
+        ? `${mm(state.plankL)} × ${mm(state.plankW)} mm · full plank`
+        : `border piece · ${(p.area/1e6).toFixed(3)} m² · ` +
+          (p.source === "offcut" ? "from an offcut" : "cut from a new plank");
+
+      if(Math.max(r.w,r.h) > unit/22){
+        for(let g=1;g<=2;g++){
+          const t = 0.28 + 0.44*seed(i*3+g);
+          const along = r.w >= r.h;
+          el("line", along
+            ? {x1:r.x+r.w*0.05, y1:r.y+r.h*t, x2:r.x+r.w*0.95, y2:r.y+r.h*t}
+            : {x1:r.x+r.w*t, y1:r.y+r.h*0.05, x2:r.x+r.w*t, y2:r.y+r.h*0.95},
+            field).setAttribute("style",
+              "stroke:rgba(90,60,25,.20);stroke-width:1;vector-effect:non-scaling-stroke");
+        }
+      }
+    });
+  } else {
+  L.pieces.forEach((p,i) => {
+    const r = L.T.toReal(p);
+    const fill = p.full ? "var(--oak)" : (p.source === "offcut" ? "var(--sage)" : "var(--oak-cut)");
+    const node = el("rect",{
+      class:"piece", x:r.x, y:r.y, width:r.w, height:r.h,
+      fill, stroke:"var(--oak-edge)", "stroke-width":1,
+      "vector-effect":"non-scaling-stroke"
+    }, layer);
+    node.dataset.info =
+      `${mm(p.w)} × ${mm(Math.min(p.h, state.plankW))} mm · row ${p.row+1} · ` +
+      (p.full ? "full plank" : p.source === "offcut" ? "from offcut" : "cut plank");
+
+    // Two faint grain lines. Cheap, and it reads as timber rather than tiles.
+    const longSide = state.dir === "h" ? r.w : r.h;
+    if(longSide > unit/22){
+      for(let g=1;g<=2;g++){
+        const t = 0.28 + 0.44*seed(i*3+g);
+        if(state.dir === "h")
+          el("line",{x1:r.x+r.w*0.04, y1:r.y+r.h*t, x2:r.x+r.w*0.96, y2:r.y+r.h*t,
+            stroke:"rgba(90,60,25,.20)", "stroke-width":1, "vector-effect":"non-scaling-stroke"}, layer);
+        else
+          el("line",{x1:r.x+r.w*t, y1:r.y+r.h*0.04, x2:r.x+r.w*t, y2:r.y+r.h*0.96,
+            stroke:"rgba(90,60,25,.20)", "stroke-width":1, "vector-effect":"non-scaling-stroke"}, layer);
+      }
+    }
+  });
+  }
+
+  // Wall outline.
+  state.rects.forEach(r => el("rect",{
+    x:r.x, y:r.y, width:r.w, height:r.h, fill:"none",
+    stroke:"var(--ink)", "stroke-width":2, "vector-effect":"non-scaling-stroke",
+    "stroke-linejoin":"miter", opacity:.85
+  }));
+
+  // Overall dimensions, drawn like a set-out drawing.
+  const dimOff = pad*0.45;
+  const dim = (x1,y1,x2,y2,label,anchor,dx,dy) => {
+    el("line",{x1,y1,x2,y2,stroke:"var(--ink-dim)","stroke-width":1,
+      "vector-effect":"non-scaling-stroke","stroke-dasharray":"6 4"});
+    const t = el("text",{
+      x:(x1+x2)/2+dx, y:(y1+y2)/2+dy, fill:"var(--ink-dim)",
+      "font-size":fs, "font-family":"IBM Plex Mono, monospace",
+      "text-anchor":anchor, "dominant-baseline":"middle"
+    });
+    t.textContent = label;
+  };
+  dim(bbReal.x, bbReal.y-dimOff, bbReal.x+bbReal.w, bbReal.y-dimOff, `${mm(bbReal.w)}`, "middle", 0, -fs*0.75);
+  dim(bbReal.x-dimOff, bbReal.y, bbReal.x-dimOff, bbReal.y+bbReal.h, `${mm(bbReal.h)}`, "end", -fs*0.4, 0);
+
+  // Starting-corner marker: an amber tick on the corner that gets a full plank.
+  const cx = (state.corner === "tr" || state.corner === "br") ? bbReal.x+bbReal.w : bbReal.x;
+  const cy = (state.corner === "bl" || state.corner === "br") ? bbReal.y+bbReal.h : bbReal.y;
+  el("circle",{cx, cy, r:unit/95, fill:"var(--amber)", stroke:"var(--mat-2)",
+    "stroke-width":2, "vector-effect":"non-scaling-stroke"});
+}
+
+/* ---- tooltip on the drawing ---- */
+(function bindTip(){
+  const wrap = document.querySelector(".plan-wrap");
+  const tip  = document.getElementById("tip");
+  const show = (e) => {
+    const t = e.target;
+    if(!(t instanceof SVGElement) || !t.dataset.info){ tip.classList.remove("on"); return; }
+    const b = wrap.getBoundingClientRect();
+    tip.textContent = t.dataset.info;
+    tip.style.left = (e.clientX - b.left) + "px";
+    tip.style.top  = (e.clientY - b.top)  + "px";
+    tip.classList.add("on");
+  };
+  wrap.addEventListener("mousemove", show);
+  wrap.addEventListener("click", show);
+  wrap.addEventListener("mouseleave", () => tip.classList.remove("on"));
+})();
+
+/* ---- numbers, notes and the cut list ---- */
+function drawResults(L){
+  const results = document.getElementById("results");
+  const notes   = document.getElementById("notes");
+  const hl      = document.getElementById("hl-planks");
+  const hlSub   = document.getElementById("hl-sub");
+
+  if(!L || L.overflow){
+    results.innerHTML = "";
+    hl.textContent = "—";
+    document.getElementById("cut-rows").innerHTML = "";
+    document.getElementById("cut-summary").innerHTML = "";
+    document.getElementById("cut-count").textContent = "";
+    if(L && L.overflow){
+      hlSub.textContent = "check your dimensions";
+      notes.innerHTML = `<div class="note warn"><span>!</span><span>
+        That room works out to <b>${mm(L.bb.w)} × ${mm(L.bb.h)} mm</b>, which is far more floor
+        than a plank layout can be drawn for. If you meant metres, switch the unit at the top of
+        the panel rather than typing the figure in millimetres.</span></div>`;
+    } else {
+      hlSub.textContent = "add an area to start";
+      notes.innerHTML = "";
+    }
+    return;
+  }
+
+  const hb = L.mode === "herringbone";
+  hl.textContent = L.withExtra;
+  hlSub.textContent = `planks · ${L.packs} pack${L.packs===1?"":"s"}` +
+    (L.cost > 0 ? ` · ${money(L.cost)}` : "");
+
+  const stats = [
+    ["key", L.withExtra,            `planks to buy (incl. ${state.extra}%)`],
+    ["key", L.packs,                `packs of ${state.perPack}`]
+  ];
+  if(L.cost > 0) stats.push(["key", money(L.cost), "material cost"]);
+  stats.push(
+    ["",    L.planksUsed,           "planks actually laid"],
+    ["",    m2(L.floorArea)+" m²",  "floor area"],
+    ["",    L.pieces.length,        "pieces on the floor"],
+    ["",    L.cutCount,             hb ? "border cuts to make" : "cross cuts to make"],
+    ["",    hb ? L.pieces.length - L.cutCount : L.rowCount, hb ? "uncut field planks" : "rows"],
+    ["",    L.wastePct.toFixed(1)+"%", "offcut waste"]
+  );
+  if(L.cost > 0) stats.push(["", money(L.costPerM2)+"/m²", "laid cost per m²"]);
+  results.innerHTML = stats.map(([cls,v,label]) =>
+    `<div class="stat ${cls}"><b>${v}</b><span>${label}</span></div>`).join("");
+
+  /* --- practical notes and warnings --- */
+  const out = [];
+
+  if(L.cost > 0){
+    const basis = state.priceBasis === "pack" ? `${L.packs} pack${L.packs===1?"":"s"}`
+                : state.priceBasis === "plank" ? `${L.planksBought} plank${L.planksBought===1?"":"s"}`
+                : `${m2(L.planksBought*state.plankL*state.plankW/1e6)} m² of product`;
+      out.push([false, `<b>${money(L.cost)}</b> is ${basis} at ${money(state.price)}
+        ${state.priceBasis === "m2" ? "per m²" : "each"}. Whole packs are assumed, so you pay for
+        ${L.planksBought} planks to lay ${L.planksUsed}.`]);
+  }
+
+  if(hb){
+    const ratio = state.plankL/state.plankW;
+    out.push([false, `Every plank sits at ${L.deg}° to the walls. The ratio here is
+      <b>${ratio.toFixed(2)}:1</b> — herringbone reads best near a whole number, and traditional
+      blocks run 4:1 or 5:1. Any ratio tiles correctly; it is purely how it looks.`]);
+    out.push([true, `<b>${L.cutCount}</b> border pieces need an angled cut. Herringbone wastes more
+      at the walls than a straight lay, so an allowance of 15% is more usual than 10%.`]);
+    if(state.reuse){
+      // Matching angled offcuts is optimistic, so show the figure without it
+      // too. The honest answer sits between the two.
+      const strict = computeLayout({...state, reuse:false});
+      const range = strict && !strict.overflow
+        ? ` Cutting a fresh plank for every border instead needs <b>${strict.withExtra}</b>
+           (${strict.packs} pack${strict.packs===1?"":"s"}), so the honest answer sits between the two.`
+        : "";
+      out.push([false, `A plank cut on a wall line gives two pieces that fit opposite walls, so the
+        ${L.withExtra}-plank figure assumes you keep and match them. That is optimistic — the cuts
+        are angled and not every pair will marry up.${range}`]);
+    }
+    out.push([false, `Set the border out before you start. Snap a centreline, dry-lay the first
+      chevron along it, and work outwards so the pattern stays square to the room rather than
+      drifting off one wall.`]);
+    notes.innerHTML = out.map(([warn,html]) =>
+      `<div class="note ${warn?"warn":""}"><span>${warn?"!":"·"}</span><span>${html}</span></div>`).join("");
+    document.getElementById("cut-table").style.display = "none";
+    document.getElementById("cut-rows").innerHTML = "";
+    document.getElementById("cut-summary").innerHTML =
+      `Herringbone borders are cut in place against the wall line rather than to a list of lengths.
+       Of ${L.pieces.length} pieces, ${L.pieces.length - L.cutCount} go down whole and
+       ${L.cutCount} are cut to fit.`;
+    document.getElementById("cut-count").textContent = `${L.cutCount} border cuts`;
+    return;
+  }
+  document.getElementById("cut-table").style.display = "";
+
+  const ends = new Set();
+  L.rows.forEach(r => {
+    if(!r.pieces.length) return;
+    ends.add(r.pieces[0]);
+    ends.add(r.pieces[r.pieces.length-1]);
+  });
+  const shortEnds = [...ends].filter(p => !p.full && p.w < 300);
+
+  const thin = [];
+  if(L.firstRowDepth < state.plankW - 1) thin.push(["first", L.firstRowDepth]);
+  if(L.lastRowDepth  < state.plankW - 1) thin.push(["last",  L.lastRowDepth]);
+  if(thin.length){
+    const warn = thin.some(([,d]) => d < 50);
+    const which = thin.map(([n,d]) => `the ${n} row to <b>${mm(d)} mm</b>`).join(" and ");
+    out.push([warn, `Ripping ${which} wide.` +
+      (warn ? " Under 50 mm the strip is fragile and hard to click in. Balance edge rows will slide the set-out point across so both edges finish the same width."
+            : " That is a normal rip cut along the wall.")]);
+  }
+  if(shortEnds.length){
+    out.push([true, `<b>${shortEnds.length}</b> row end${shortEnds.length===1?" is":"s are"} shorter than 300 mm.
+      Short end pieces work loose over time. Adjust the stagger, or trim the first plank of the first row to move the whole pattern along.`]);
+  }
+  if(L.stagger > 0 && L.stagger < 300){
+    out.push([true, `A ${mm(L.stagger)} mm stagger puts the joins in neighbouring rows close together. Most manufacturers ask for at least 300 mm.`]);
+  }
+  if(state.originX || state.originY){
+    out.push([false, `Set out from <b>${mm(state.originX)}, ${mm(state.originY)}</b> in from the
+      chosen corner. Mark that point on the slab and snap your lines off it before you lay
+      anything — the whole pattern hangs on it.`]);
+  }
+  if(L.ripRows > 0){
+    out.push([false, `<b>${L.ripRows}</b> row${L.ripRows===1?"":"s"} need a lengthwise rip cut where the floor changes depth. These do not change how many planks you buy, but budget time for them.`]);
+  }
+  if(state.reuse && L.offcutSaves > 0){
+    out.push([false, `Starting rows with the previous offcut saved <b>${L.offcutSaves}</b> plank${L.offcutSaves===1?"":"s"}. Keep offcuts sorted by length as you go.`]);
+  }
+  if(L.leftoverPool.length){
+    out.push([false, `You will finish with ${L.leftoverPool.length} usable offcut${L.leftoverPool.length===1?"":"s"} — longest ${mm(L.leftoverPool[0])} mm. Keep a couple for future repairs.`]);
+  }
+  notes.innerHTML = out.map(([warn,html]) =>
+    `<div class="note ${warn?"warn":""}"><span>${warn?"!":"·"}</span><span>${html}</span></div>`).join("");
+
+  /* --- cut list --- */
+  const tbody = document.getElementById("cut-rows");
+  const cap = 200;                                   // keep the table readable
+  tbody.innerHTML = L.rows.slice(0,cap).map(r => {
+    if(!r.pieces.length) return "";
+    const cells = r.pieces.map(p => {
+      const cls = p.full ? "full" : (p.source === "offcut" ? "reuse" : "cut");
+      return `<span class="pill ${cls}">${mm(p.w)}</span>`;
+    }).join("");
+    return `<tr><td class="row-no">${r.index+1}</td><td>${cells}</td></tr>`;
+  }).join("") + (L.rows.length > cap ? `<tr><td></td><td>… ${L.rows.length-cap} more rows</td></tr>` : "");
+
+  // Tally identical cut lengths, rounded to 5 mm — this is the list you take to the saw.
+  const tally = new Map();
+  L.pieces.filter(p => !p.full).forEach(p => {
+    const k = Math.round(p.w/5)*5;
+    tally.set(k, (tally.get(k)||0)+1);
+  });
+  const sorted = [...tally.entries()].sort((a,b) => b[0]-a[0]);
+  document.getElementById("cut-summary").innerHTML = sorted.length
+    ? "Cuts by length: " + sorted.map(([len,n]) => `<span class="pill cut">${mm(len)}&nbsp;×${n}</span>`).join("")
+    : "No cutting needed — every piece is a full plank.";
+  document.getElementById("cut-count").textContent =
+    `${L.cutCount} cut${L.cutCount===1?"":"s"} across ${L.rowCount} rows`;
+}
+
+/* ---- the rectangle editor ---- */
+function drawAreas(){
+  const box = document.getElementById("areas");
+  box.innerHTML = "";
+  const step = state.units === "m" ? 0.1 : 10;
+
+  state.rects.forEach((r,i) => {
+    const row = document.createElement("div");
+    row.className = "area-row";
+    row.innerHTML = `<span class="tag">${String.fromCharCode(65+i)}</span>` +
+      ["x","y","w","h"].map(k =>
+        `<input type="number" step="${step}" data-i="${i}" data-k="${k}" value="${toDisplay(r[k])}"
+           aria-label="Area ${String.fromCharCode(65+i)} ${k}">`).join("") +
+      `<button class="x-btn" data-del="${i}" aria-label="Remove area ${String.fromCharCode(65+i)}" ${state.rects.length<2?"disabled":""}>✕</button>`;
+    box.appendChild(row);
+  });
+
+  box.querySelectorAll("input").forEach(inp => {
+    inp.addEventListener("input", e => {
+      const {i,k} = e.target.dataset;
+      const v = fromDisplay(parseFloat(e.target.value));
+      if(!isFinite(v)) return;
+      state.rects[+i][k] = (k === "w" || k === "h") ? Math.max(1, v) : v;
+      refresh();
+    });
+    inp.addEventListener("focus", e => { state.focusRect = +e.target.dataset.i; refresh(); });
+    inp.addEventListener("blur",  () => { state.focusRect = -1; refresh(); });
+  });
+  box.querySelectorAll("[data-del]").forEach(b =>
+    b.addEventListener("click", e => {
+      state.rects.splice(+e.currentTarget.dataset.del, 1);
+      drawAreas(); refresh();
+    }));
+  document.getElementById("unit-note").textContent = state.units === "m" ? "metres" : "mm";
+}
+
+/* ---- direction and corner pickers ------------------------------
+   Both are drawn as little plan-view thumbnails so the choice is
+   obvious without reading a label.                               */
+function drawPickers(){
+  const hb = state.pattern === "herringbone";
+
+  /* A chevron, optionally rotated, for the herringbone thumbnails. */
+  const chevron = (deg) => `<svg width="44" height="32" viewBox="0 0 44 32" aria-hidden="true">
+      <rect x="2" y="2" width="40" height="28" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <g transform="rotate(${deg} 22 16)" stroke="currentColor" stroke-width="1.6"
+         fill="none" opacity=".75" stroke-linecap="round">
+        <path d="M8 22 L16 12 L24 22 M16 22 L24 12 L32 22"/>
+      </g></svg>`;
+
+  document.getElementById("pattern").innerHTML = [
+    ["straight","Straight rows"], ["herringbone","Herringbone"]
+  ].map(([v,label]) => `<button data-pattern="${v}" aria-pressed="${state.pattern===v}">${
+      v === "straight"
+        ? `<svg width="44" height="32" viewBox="0 0 44 32" aria-hidden="true">
+             <rect x="2" y="2" width="40" height="28" fill="none" stroke="currentColor" stroke-width="1.4"/>
+             <line x1="2" y1="9"  x2="42" y2="9"  stroke="currentColor" stroke-width="1.4" opacity=".55"/>
+             <line x1="2" y1="16" x2="42" y2="16" stroke="currentColor" stroke-width="1.4" opacity=".55"/>
+             <line x1="2" y1="23" x2="42" y2="23" stroke="currentColor" stroke-width="1.4" opacity=".55"/>
+           </svg>`
+        : chevron(0)
+    }<span>${label}</span></button>`).join("");
+
+  document.querySelectorAll("[data-pattern]").forEach(b =>
+    b.addEventListener("click", () => {
+      state.pattern = b.dataset.pattern;
+      drawPickers(); refresh();
+    }));
+
+  // The direction and corner controls mean different things per pattern.
+  document.getElementById("dir-head").textContent = hb ? "Angle" : "Direction";
+  document.getElementById("corner-head").firstChild.textContent =
+    hb ? "Pattern anchor " : "Starting corner ";
+  document.getElementById("corner-sub").textContent =
+    hb ? "pattern pinned here" : "full plank here";
+  document.getElementById("stagger-field").style.display = hb ? "none" : "";
+  document.getElementById("reuse-label").textContent =
+    hb ? "Match border offcuts to the opposite wall" : "Start rows with the previous offcut";
+  document.getElementById("balance").style.display = hb ? "none" : "";
+  document.getElementById("origin-hint").textContent = hb
+    ? "Where the pattern's origin sits, measured in from that corner. Move it to place the "
+      + "chevron line exactly where you want it, usually on the room's centreline."
+    : "Where the corner of the first full plank sits, measured in from that corner. "
+      + "Leave both at 0 to start hard against the walls.";
+  document.getElementById("ratio-hint").textContent = hb
+    ? `Planks sit at an angle and interlock in pairs. Ratio ${(state.plankL/state.plankW).toFixed(2)}:1.`
+    : "Planks run in parallel rows, each shifted along by the stagger.";
+
+  if(hb){
+    document.getElementById("dir").innerHTML = [45,135,0,90].map(deg =>
+      `<button data-angle="${deg}" aria-pressed="${state.hbAngle===deg}">${chevron(deg)}<span>${
+        deg === 45 || deg === 135 ? `Diagonal ${deg}°` : `Square ${deg}°`}</span></button>`).join("");
+    document.querySelectorAll("[data-angle]").forEach(b =>
+      b.addEventListener("click", () => { state.hbAngle = +b.dataset.angle; drawPickers(); refresh(); }));
+  }
+
+  const thumb = (dirH, corner) => {
+    const lines = [];
+    for(let k=1;k<4;k++){
+      lines.push(dirH
+        ? `<line x1="2" y1="${k*8}" x2="42" y2="${k*8}" stroke="currentColor" stroke-width="1.4" opacity=".55"/>`
+        : `<line x1="${k*10.5}" y1="2" x2="${k*10.5}" y2="30" stroke="currentColor" stroke-width="1.4" opacity=".55"/>`);
+    }
+    const cx = (corner === "tr" || corner === "br") ? 42 : 2;
+    const cy = (corner === "bl" || corner === "br") ? 30 : 2;
+    const dot = corner ? `<circle cx="${cx}" cy="${cy}" r="3.4" fill="var(--amber)"/>` : "";
+    return `<svg width="44" height="32" viewBox="0 0 44 32" aria-hidden="true">
+      <rect x="2" y="2" width="40" height="28" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      ${lines.join("")}${dot}</svg>`;
+  };
+
+  if(!hb){
+    document.getElementById("dir").innerHTML = [
+      ["h","Left to right"], ["v","Top to bottom"]
+    ].map(([v,label]) =>
+      `<button data-dir="${v}" aria-pressed="${state.dir===v}">${thumb(v==="h",null)}<span>${label}</span></button>`
+    ).join("");
+    document.querySelectorAll("[data-dir]").forEach(b =>
+      b.addEventListener("click", () => { state.dir = b.dataset.dir; drawPickers(); refresh(); }));
+  }
+
+  document.getElementById("corner").innerHTML = [
+    ["tl","Top left"],["tr","Top right"],["bl","Bottom left"],["br","Bottom right"]
+  ].map(([v,label]) =>
+    `<button data-corner="${v}" aria-pressed="${state.corner===v}">${thumb(state.dir==="h",v)}<span>${label}</span></button>`
+  ).join("");
+
+  document.querySelectorAll("[data-corner]").forEach(b =>
+    b.addEventListener("click", () => { state.corner = b.dataset.corner; drawPickers(); refresh(); }));
+}
+
+/* ---------- the set-out point -----------------------------------
+   Where the corner of the first full plank sits, measured in from the
+   starting corner. Leaving it at zero starts the floor hard against
+   the walls, which is what most people want until the edge row comes
+   out as a sliver.
+   ---------------------------------------------------------------- */
+
+/**
+ * Slide the pattern across the rows so the two edge rows finish the
+ * same width — the usual fix for a final row that is too narrow to
+ * click in. Solving `span = 2d + n*plankW` for the largest n that
+ * leaves d within one plank width gives d = (leftover + plankW)/2.
+ */
+function balanceRows(){
+  const bb = bboxOf(state.rects);
+  const span = state.dir === "v" ? bb.w : bb.h;      // across the rows
+  const W = state.plankW;
+  const leftover = span - Math.floor(span/W + EPS)*W;
+  // A room that already divides exactly needs no cuts, so leave it alone.
+  const d = leftover < 1 ? 0 : Math.round((leftover + W)/2);
+  if(state.dir === "v") state.originX = d; else state.originY = d;
+  syncInputs();
+  refresh();
+  toast(d === 0
+    ? "The rows already divide exactly — no set-out needed."
+    : `Both edge rows now finish at ${mm(d)} mm.`);
+}
+
+/* ================================================================
+   SAVING, LOADING, STARTING OVER
+   ================================================================ */
+
+let toastTimer;
+function toast(msg, bad){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "toast on" + (bad ? " bad" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = "toast" + (bad ? " bad" : ""); }, 5000);
+}
+
+/** Push the whole of state back into the controls. */
+function syncInputs(){
+  const set = (id, v) => { const el = document.getElementById(id); if(el) el.value = v; };
+  set("plan-name", state.name);
+  set("units", state.units);
+  set("plankL", state.plankL);
+  set("plankW", state.plankW);
+  set("perPack", state.perPack);
+  set("originX", state.originX);
+  set("originY", state.originY);
+  set("stagger", state.stagger);
+  set("minOff", state.minOff);
+  set("extra", state.extra);
+  set("priceBasis", state.priceBasis);
+  set("price", state.price);
+  set("currency", state.currency);
+  document.getElementById("reuse").checked = state.reuse;
+  document.getElementById("cur-sym").textContent = state.currency;
+}
+
+/** Replace everything the user can edit, then redraw the lot. */
+function applyPlan(plan, note, bad){
+  Object.assign(state, plan);
+  state.rects = plan.rects.map(r => ({...r}));
+  state.focusRect = -1;
+  syncInputs();
+  drawAreas();
+  drawPickers();
+  refresh();
+  writePlanText();
+  if(note) toast(note, bad);
+}
+
+function writePlanText(force){
+  const box = document.getElementById("plan-text");
+  // Never overwrite something the user is in the middle of pasting.
+  if(!force && document.activeElement === box) return;
+  box.value = JSON.stringify(serialisePlan(state), null, 2);
+}
+
+function slug(name){
+  return (name || "plan").toLowerCase().replace(/[^a-z0-9]+/g,"-")
+         .replace(/^-+|-+$/g,"").slice(0,50) || "plan";
+}
+
+function savePlan(){
+  writePlanText(true);
+  const json = document.getElementById("plan-text").value;
+  const file = `${slug(state.name)}.plankplan.json`;
+  try{
+    const url = URL.createObjectURL(new Blob([json], {type:"application/json"}));
+    const a = document.createElement("a");
+    a.href = url; a.download = file;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast(`Saved ${file}`);
+  }catch(err){
+    // Some sandboxes block downloads outright. The text box is the way out.
+    toast("Downloads are blocked here. Copy the plan text at the bottom of the panel instead.", true);
+  }
+}
+
+function loadFromText(text, source){
+  let parsed;
+  try{
+    parsed = JSON.parse(text);
+  }catch(err){
+    toast(`That ${source} is not readable JSON.`, true);
+    return;
+  }
+  const { plan, warnings, ok } = sanitisePlan(parsed);
+  if(!ok){ toast(warnings[0], true); return; }
+  applyPlan(plan, warnings.length ? warnings[0] : `Loaded ${plan.name}`, warnings.length > 0);
+}
+
+document.getElementById("save-plan").addEventListener("click", savePlan);
+
+document.getElementById("load-plan").addEventListener("click", () =>
+  document.getElementById("load-file").click());
+
+document.getElementById("load-file").addEventListener("change", e => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";                 // so the same file can be picked twice
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload  = () => loadFromText(String(reader.result), "file");
+  reader.onerror = () => toast("That file could not be read.", true);
+  reader.readAsText(file);
+});
+
+/* "New" asks twice rather than opening a dialog box, because sandboxed
+   pages can have confirm() taken away from them. */
+(function bindNew(){
+  const btn = document.getElementById("new-plan");
+  let armed = false, timer;
+  const disarm = () => { armed = false; btn.textContent = "New"; btn.classList.remove("btn-danger"); };
+  btn.addEventListener("click", () => {
+    if(!armed){
+      armed = true;
+      btn.textContent = "Discard?";
+      btn.classList.add("btn-danger");
+      clearTimeout(timer);
+      timer = setTimeout(disarm, 4000);
+      return;
+    }
+    clearTimeout(timer);
+    disarm();
+    applyPlan(defaultPlan(), "Started a new plan");
+  });
+})();
+
+document.getElementById("apply-text").addEventListener("click", () =>
+  loadFromText(document.getElementById("plan-text").value, "text"));
+
+document.getElementById("copy-text").addEventListener("click", async () => {
+  const box = document.getElementById("plan-text");
+  writePlanText(true);
+  try{
+    await navigator.clipboard.writeText(box.value);
+    toast("Plan copied to the clipboard");
+  }catch(err){
+    box.select();                      // fall back to leaving it selected
+    toast("Select-all is done — press copy on your keyboard.", true);
+  }
+});
+
+document.getElementById("plan-name").addEventListener("input", e => {
+  state.name = e.target.value.slice(0,80) || "Untitled plan";
+  writePlanText();
+});
+
+/* ================================================================
+   WIRING
+   ================================================================ */
+function refresh(){
+  const L = computeLayout(state);
+  drawPlan(L);
+  drawResults(L);
+  writePlanText();
+}
+
+function bindNumber(id, key, min){
+  const el = document.getElementById(id);
+  el.addEventListener("input", () => {
+    const v = parseFloat(el.value);
+    if(!isFinite(v)) return;
+    state[key] = Math.max(min, v);
+    refresh();
+  });
+}
+bindNumber("plankL","plankL",100);
+bindNumber("plankW","plankW",20);
+["plankL","plankW"].forEach(id =>
+  document.getElementById(id).addEventListener("input", drawPickers));
+bindNumber("perPack","perPack",1);
+bindNumber("stagger","stagger",0);
+bindNumber("originX","originX",-5000);
+bindNumber("originY","originY",-5000);
+document.getElementById("balance").addEventListener("click", balanceRows);
+document.getElementById("reset-origin").addEventListener("click", () => {
+  state.originX = 0; state.originY = 0;
+  syncInputs(); refresh();
+  toast("Set out from the corner again");
+});
+bindNumber("minOff","minOff",0);
+bindNumber("extra","extra",0);
+
+document.getElementById("reuse").addEventListener("change", e => {
+  state.reuse = e.target.checked; refresh();
+});
+bindNumber("price","price",0);
+document.getElementById("priceBasis").addEventListener("change", e => {
+  state.priceBasis = e.target.value; refresh();
+});
+document.getElementById("currency").addEventListener("input", e => {
+  state.currency = e.target.value || "$";
+  document.getElementById("cur-sym").textContent = state.currency;
+  refresh();
+});
+document.getElementById("units").addEventListener("change", e => {
+  state.units = e.target.value; drawAreas();
+});
+document.getElementById("add-area").addEventListener("click", () => {
+  const bb = bboxOf(state.rects);
+  state.rects.push({x:bb.x+bb.w, y:bb.y, w:1500, h:1500});
+  drawAreas(); refresh();
+});
+document.querySelectorAll("[data-preset]").forEach(b =>
+  b.addEventListener("click", () => {
+    state.rects = PRESETS[b.dataset.preset].map(r => ({...r}));
+    drawAreas(); refresh();
+  }));
+
+/* ---- start up ---- */
+syncInputs();
+drawAreas();
+drawPickers();
+refresh();
+</script>
+</body>
+</html>
