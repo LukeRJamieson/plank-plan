@@ -462,6 +462,11 @@ td.row-no{color:var(--ink-dim);width:3rem}
       <div class="field" id="stagger-field">
         <label for="stagger">Stagger — how far each row shifts</label>
         <input type="number" id="stagger" value="300" min="0" step="10">
+        <div class="presets">
+          <button class="btn" id="best-stagger"
+            title="Try every usable stagger and keep the one whose shortest row end is longest">
+            Avoid short ends</button>
+        </div>
       </div>
       <label class="check"><input type="checkbox" id="reuse" checked>
         <span id="reuse-label">Start rows with the previous offcut</span></label>
@@ -1142,6 +1147,133 @@ function computeStraight(st){
     lastRowDepth:  Math.min(plankW, bb.y + bb.h - (rowStart + kHi*plankW)),
     ...acc, leftoverPool: acc.pool
   });
+}
+
+/* ---------- choosing a stagger -----------------------------------
+   The stagger is the one setting with no obviously right value, and a
+   bad one shows up as short pieces finishing the rows. Short ends work
+   loose over time, so it is worth searching for the value that leaves
+   fewest of them rather than leaving the user to poke at the field.
+   ---------------------------------------------------------------- */
+
+const MIN_END  = 300;   // mm; a row end shorter than this works loose over time
+const MIN_JOIN = 300;   // mm; joins in neighbouring rows closer than this read as a line
+
+/** The pieces that finish a row at either end. A row of one piece has one
+    end and not two, which is why this is a set. */
+function rowEnds(L){
+  const ends = new Set();
+  for(const r of L.rows){
+    if(!r.pieces.length) continue;
+    ends.add(r.pieces[0]);
+    ends.add(r.pieces[r.pieces.length - 1]);
+  }
+  return [...ends];
+}
+
+/**
+ * How well a layout's row ends hold together: how many finish under the limit,
+ * and how short the worst of them is. A full plank finishing a row is the best
+ * case there is, so it counts as a whole plank rather than as a short end.
+ */
+function endScore(L, plankL, limit){
+  let short = 0, shortest = Infinity;
+  for(const p of rowEnds(L)){
+    const len = p.full ? plankL : p.w;
+    if(len < limit) short++;
+    if(len < shortest) shortest = len;
+  }
+  return { short, shortest: shortest === Infinity ? plankL : shortest };
+}
+
+/**
+ * How far apart the joins in neighbouring rows actually fall — the thing the
+ * stagger exists for. Joins repeat every plank length, so a stagger of almost
+ * a whole plank puts them just as close together as one of almost nothing:
+ * 1185 mm on a 1285 mm plank leaves 100 mm, not 1185.
+ */
+function joinGap(stagger, plankL){
+  if(!(plankL > 0)) return 0;
+  const d = ((stagger % plankL) + plankL) % plankL;
+  return Math.min(d, plankL - d);
+}
+
+/**
+ * Sweep the usable staggers and pick the one that leaves fewest short row
+ * ends.
+ *
+ * "Usable" means the joins in neighbouring rows still clear the minimum.
+ * There is no point curing short ends by lining every join up, which is the
+ * very thing the stagger is there to prevent — so the search is bounded by
+ * that, not by taste. On a plank too short to give 300 mm of clearance on
+ * both sides, a third of the plank is asked for instead.
+ *
+ * Candidates are ranked by their *worst* row end rather than by how many are
+ * short. Counting alone would happily trade six 45 mm ends for three 5 mm
+ * ones, and a 5 mm end is not a piece of flooring at all. Making the worst end
+ * as long as possible subsumes the count anyway: push it past the limit and
+ * there are no short ends left to count.
+ *
+ * Ties then go to the layout with fewest short ends, then to the one using
+ * fewer planks, and last to the stagger nearest the one already set, so the
+ * answer does not jump about between equally good options.
+ *
+ * Returns null when there is nothing to search: herringbone has no stagger,
+ * and a room that will not lay has no scores to compare.
+ */
+function bestStagger(st){
+  const plankL = st.plankL;
+  if(st.pattern === "herringbone") return null;
+  if(!(plankL > 0) || !st.rects || !st.rects.length) return null;
+
+  const base = computeStraight(st);
+  if(!base || base.overflow) return null;
+
+  const need = Math.min(MIN_JOIN, plankL/3);
+  const lo = Math.ceil(need), hi = Math.floor(plankL - need);
+  if(hi <= lo) return null;
+
+  // Every candidate costs a whole layout, so a big floor gets a coarser step
+  // rather than a long wait. The budget is in pieces laid, not in candidates.
+  const tries = Math.max(8, Math.min(160, Math.floor(2.5e5 / Math.max(1, base.pieces.length))));
+  const step  = Math.max(5, Math.ceil((hi - lo)/tries/5)*5);
+
+  const cands = [];
+  for(let s = lo; s <= hi; s += step) cands.push(s);
+  // Whatever is set now has to be in the running, or a sweep that steps over
+  // it could talk the user out of an answer that was already the best one.
+  const curS = ((st.stagger % plankL) + plankL) % plankL;
+  if(curS >= lo && curS <= hi && cands.indexOf(curS) < 0) cands.push(curS);
+
+  const score = (L, s) => {
+    const e = endScore(L, plankL, MIN_END);
+    return { stagger:s, short:e.short, shortest:Math.round(e.shortest),
+             planks:L.planksUsed, near:Math.abs(s - curS) };
+  };
+  const better = (a, b) =>
+      a.shortest  !== b.shortest  ? a.shortest  > b.shortest
+    : a.short     !== b.short     ? a.short     < b.short
+    : a.planks    !== b.planks    ? a.planks    < b.planks
+    : a.near < b.near;
+
+  let best = null, tried = 0;
+  for(const s of cands){
+    const L = computeStraight({...st, stagger:s});
+    if(!L || L.overflow) continue;
+    tried++;
+    const cand = score(L, s);
+    if(!best || better(cand, best)) best = cand;
+  }
+  if(!best) return null;
+
+  const was = endScore(base, plankL, MIN_END);
+  return {
+    stagger: best.stagger, short: best.short, shortest: best.shortest,
+    planksUsed: best.planks, joinGap: joinGap(best.stagger, plankL),
+    tried, step,
+    from: { stagger: st.stagger, short: was.short, shortest: Math.round(was.shortest),
+            planksUsed: base.planksUsed, joinGap: joinGap(st.stagger, plankL) }
+  };
 }
 
 /* ENGINE:END */
@@ -1986,13 +2118,9 @@ function drawResults(L){
   }
   document.getElementById("cut-table").style.display = "";
 
-  const ends = new Set();
-  L.rows.forEach(r => {
-    if(!r.pieces.length) return;
-    ends.add(r.pieces[0]);
-    ends.add(r.pieces[r.pieces.length-1]);
-  });
-  const shortEnds = [...ends].filter(p => !p.full && p.w < 300);
+  // Scored by the engine, so what the warning counts and what the search
+  // optimises for can never drift apart.
+  const ends = endScore(L, state.plankL, MIN_END);
 
   const thin = [];
   if(L.firstRowDepth < state.plankW - 1) thin.push(["first", L.firstRowDepth]);
@@ -2004,12 +2132,22 @@ function drawResults(L){
       (warn ? " Under 50 mm the strip is fragile and hard to click in. Balance edge rows will slide the set-out point across so both edges finish the same width."
             : " That is a normal rip cut along the wall.")]);
   }
-  if(shortEnds.length){
-    out.push([true, `<b>${shortEnds.length}</b> row end${shortEnds.length===1?" is":"s are"} shorter than 300 mm.
-      Short end pieces work loose over time. Adjust the stagger, or trim the first plank of the first row to move the whole pattern along.`]);
+  if(ends.short){
+    out.push([true, `<b>${ends.short}</b> row end${ends.short===1?" is":"s are"} shorter than ${MIN_END} mm,
+      the shortest <b>${mm(ends.shortest)} mm</b>. Short end pieces work loose over time.
+      <b>Avoid short ends</b> will search the stagger for you; failing that, trim the first plank
+      of the first row to move the whole pattern along.`]);
+  } else if(L.rowCount > 1){
+    out.push([false, `No row finishes on a piece under ${MIN_END} mm — the shortest is
+      <b>${mm(ends.shortest)} mm</b>. Nothing at the row ends will work loose.`]);
   }
-  if(L.stagger > 0 && L.stagger < 300){
-    out.push([true, `A ${mm(L.stagger)} mm stagger puts the joins in neighbouring rows close together. Most manufacturers ask for at least 300 mm.`]);
+  // Joins repeat every plank length, so a stagger just short of a whole plank
+  // is as bad as one just short of nothing. Measure the gap, not the setting.
+  const gap = joinGap(state.stagger, state.plankL);
+  if(L.rowCount > 1 && L.stagger > 0 && gap < MIN_JOIN){
+    out.push([true, `The joins in neighbouring rows fall only <b>${mm(gap)} mm</b> apart at a
+      ${mm(state.stagger)} mm stagger. Most manufacturers ask for at least ${MIN_JOIN} mm —
+      <b>Avoid short ends</b> only ever picks a stagger that clears it.`]);
   }
   if(state.originX || state.originY){
     out.push([false, `Set out from <b>${mm(state.originX)}, ${mm(state.originY)}</b> in from the
@@ -2240,6 +2378,44 @@ function balanceRows(){
     : `Both edge rows now finish at ${mm(d)} mm.`);
 }
 
+/**
+ * Set the stagger to whichever value leaves fewest short row ends.
+ *
+ * The search is in the engine; this is the reporting, which has to be honest
+ * about the case where the room's width, not the stagger, is what is putting
+ * the short pieces there. Telling someone a figure is "best" when it still
+ * leaves four bad ends would be worse than saying nothing.
+ */
+function findStagger(){
+  const r = bestStagger(state);
+  if(!r){
+    toast("There is no layout to search. Check the room dimensions first.", true);
+    return;
+  }
+
+  const moved = Math.abs(r.stagger - r.from.stagger) > 0.5;
+  state.stagger = r.stagger;
+  syncInputs();
+  refresh();
+
+  const ends = n => `${n} row end${n === 1 ? "" : "s"}`;
+  if(!moved){
+    toast(`${mm(r.stagger)} mm is already the best of the ${r.tried} staggers tried — ` +
+          (r.short === 0
+            ? `no row end under ${MIN_END} mm.`
+            : `${ends(r.short)} still under ${MIN_END} mm, the shortest ${mm(r.shortest)} mm. ` +
+              `The room's width is the constraint here, not the stagger.`), r.short > 0);
+  } else if(r.short === 0){
+    toast(`Stagger set to ${mm(r.stagger)} mm — no row end under ${MIN_END} mm` +
+          (r.from.short ? `, down from ${r.from.short}. ` : `. `) +
+          `The shortest is now ${mm(r.shortest)} mm.`);
+  } else {
+    toast(`Stagger set to ${mm(r.stagger)} mm — the shortest row end goes from ` +
+          `${mm(r.from.shortest)} to ${mm(r.shortest)} mm. ${ends(r.short)} are still under ` +
+          `${MIN_END} mm, so try the set-out point along the row as well.`, true);
+  }
+}
+
 /* ================================================================
    SAVING, LOADING, STARTING OVER
    ================================================================ */
@@ -2417,6 +2593,7 @@ bindNumber("stagger","stagger",0);
 bindNumber("originX","originX",-5000);
 bindNumber("originY","originY",-5000);
 document.getElementById("balance").addEventListener("click", balanceRows);
+document.getElementById("best-stagger").addEventListener("click", findStagger);
 document.getElementById("reset-origin").addEventListener("click", () => {
   state.originX = 0; state.originY = 0;
   syncInputs(); refresh();

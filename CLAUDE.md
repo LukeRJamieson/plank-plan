@@ -285,6 +285,38 @@ that turns a 192/92 mm edge split into an even 142/142 for the same 86 planks. A
 room that already divides exactly is left at zero — balancing it would
 manufacture two half-width edge rows where none were needed.
 
+## Choosing a stagger
+
+`bestStagger()` sweeps the usable staggers and picks one. Three decisions in it
+are worth knowing before changing anything:
+
+**It ranks by the worst row end, not by how many are short.** Counting alone
+will happily trade six 45 mm ends for three 5 mm ones, and a 5 mm end is not a
+piece of flooring. Maximising the shortest end subsumes the count anyway: push
+the worst past `MIN_END` and there is nothing left to count. Ties fall through
+to fewest short ends, then fewest planks, then the stagger nearest the one
+already set — that last one is what stops the answer jumping about between
+equally good options, and it is why asking twice gives the same answer.
+
+**The search is bounded by the join clearance, not by taste.** A stagger only
+counts as usable if the joins in neighbouring rows still clear `MIN_JOIN`.
+Curing short ends by lining every join up would defeat the point of a stagger,
+so those candidates are never offered. On a plank too short for 300 mm either
+side, a third of the plank is asked for instead — which is why a 300 mm plank
+still gets an answer.
+
+**`joinGap()` measures the gap, not the setting.** Joins repeat every plank
+length, so 1185 mm on a 1285 mm plank leaves neighbouring rows 100 mm apart,
+not 1185. The old warning compared the raw stagger against 300 and so said
+nothing about that case.
+
+The sweep costs one whole `computeStraight` per candidate, so the budget is in
+pieces laid rather than candidates tried: a big floor gets a coarser step
+instead of a long wait. A 12 x 9 m room lands in about 30 ms.
+
+`endScore()` is shared by the search and the warning in the results panel, so
+what the app warns about and what the button optimises cannot drift apart.
+
 ## Invariants worth preserving
 
 The tests encode these; break one and something is wrong.
@@ -311,6 +343,12 @@ The tests encode these; break one and something is wrong.
 - Snapping a moved rectangle never changes its width or height.
 - A rectangle drawn from either corner comes out the same way round.
 - The dragged rectangle is never offered as its own snap target.
+- `bestStagger` never returns a stagger whose join gap is under the minimum.
+- The worst row end never comes back worse than the one it went in with,
+  provided what went in cleared the joins itself.
+- Asked again from its own answer, `bestStagger` returns that same answer.
+- `short === 0` exactly when `shortest >= MIN_END`; they are two views of one
+  thing, not two measurements.
 
 ## Domain glossary
 
@@ -320,7 +358,8 @@ The tests encode these; break one and something is wrong.
 | Offcut | The tail left after cutting a plank to fit. Normally starts the next row. |
 | Rip cut | A cut along the plank's length, narrowing it. Needed on the last row and where the floor changes depth. |
 | Expansion gap | The 8–10 mm left at every wall so the floor can move. |
-| End piece | The short piece finishing a row. Under 300 mm it works loose over time, so the app warns. |
+| End piece | The short piece finishing a row. Under `MIN_END` (300 mm) it works loose over time, so the app warns. |
+| Join gap | How far apart the joins in neighbouring rows actually fall. Not the stagger: joins repeat every plank length, so it is `min(d, plankL - d)`. |
 | Herringbone | Square-ended planks in interlocking perpendicular pairs, usually at 45° to the walls. |
 | Field | The main body of the floor away from the borders. A field plank goes down uncut. |
 
@@ -337,6 +376,11 @@ Don't "fix" these without asking — they are choices, not oversights.
   angled bays.
 - **A single stagger value.** Real installers sometimes randomise the offset;
   a fixed stagger is what manufacturers specify.
+- **The stagger search only moves the stagger.** The set-out point along the
+  row is the other lever on where the row ends fall, and searching both
+  together would be a two-dimensional sweep for a marginal gain. Where the room
+  width is what is putting the short pieces there, the notes say so rather than
+  pretending the stagger can fix it.
 - **Herringbone offcut pairing is area-based**, not real 2D nesting. Solving it
   properly is bin-packing with rotation; the two-figure range is the honest
   presentation of an estimate.

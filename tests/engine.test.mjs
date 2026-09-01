@@ -23,11 +23,13 @@ assert.ok(start > -1 && end > start, "ENGINE markers missing from index.html");
 const source = html.slice(html.indexOf("*/", start) + 2, end);
 const {
   EPS, PRESETS, unionIntervals, unionArea, bboxOf, makeTransform, computeLayout,
-  snapCandidates, snapOne, snapMoved, normRect
+  snapCandidates, snapOne, snapMoved, normRect,
+  MIN_END, MIN_JOIN, rowEnds, endScore, joinGap, bestStagger
 } = new Function(
   source +
   "\nreturn { EPS, PRESETS, unionIntervals, unionArea, bboxOf, makeTransform, computeLayout," +
-  "\n         snapCandidates, snapOne, snapMoved, normRect };"
+  "\n         snapCandidates, snapOne, snapMoved, normRect," +
+  "\n         MIN_END, MIN_JOIN, rowEnds, endScore, joinGap, bestStagger };"
 )();
 
 /** Standard settings; individual tests override what they care about. */
@@ -244,6 +246,162 @@ test("the extra allowance rounds up and packs follow it", () => {
   const L = computeLayout(cfg({ extra: 10, perPack: 8 }));
   assert.equal(L.withExtra, Math.ceil(L.planksUsed * 1.1));
   assert.equal(L.packs, Math.ceil(L.withExtra / 8));
+});
+
+/* ---------------------------------------------------------------- */
+/* Choosing a stagger                                               */
+/* ---------------------------------------------------------------- */
+
+test("joinGap measures the gap, not the setting", () => {
+  const L = 1285;
+  assert.equal(joinGap(300, L), 300);
+  assert.equal(joinGap(642.5, L), 642.5);          // half a plank is the most there is
+  // Joins repeat every plank, so almost a whole plank is almost no gap at all.
+  assert.equal(joinGap(1185, L), 100);
+  assert.equal(joinGap(L, L), 0);
+  assert.equal(joinGap(L + 300, L), 300);          // and it wraps
+  assert.equal(joinGap(-300, L), 300);
+  assert.equal(joinGap(300, 0), 0);
+});
+
+test("row ends are the pieces finishing each row, counted once", () => {
+  const L = computeLayout(cfg());
+  const ends = rowEnds(L);
+  for (const row of L.rows) {
+    if (!row.pieces.length) continue;
+    assert.ok(ends.includes(row.pieces[0]), "first piece of a row is not an end");
+    assert.ok(ends.includes(row.pieces[row.pieces.length - 1]), "last piece of a row is not an end");
+  }
+  // A row of a single piece contributes that piece once, not twice. Without
+  // the stagger every row here is one 900 mm piece.
+  const single = computeLayout(cfg({ rects: [{ x: 0, y: 0, w: 900, h: 192 * 3 }], stagger: 0 }));
+  assert.equal(single.rows.length, 3);
+  assert.ok(single.rows.every(r => r.pieces.length === 1));
+  assert.equal(rowEnds(single).length, 3);
+});
+
+test("a full plank finishing a row is never a short end", () => {
+  const L = computeLayout(cfg({
+    rects: [{ x: 0, y: 0, w: 1285 * 3, h: 192 * 5 }], stagger: 0
+  }));
+  const e = endScore(L, base.plankL, MIN_END);
+  assert.equal(e.short, 0);
+  assert.equal(e.shortest, base.plankL);
+});
+
+test("endScore counts the ends the warning warns about", () => {
+  const L = computeLayout(cfg({ stagger: 300 }));
+  const e = endScore(L, base.plankL, MIN_END);
+  const byHand = rowEnds(L).filter(p => !p.full && p.w < MIN_END).length;
+  assert.equal(e.short, byHand);
+  assert.ok(e.shortest > 0 && e.shortest <= base.plankL);
+});
+
+test("the worst row end never comes back worse than it went in", () => {
+  // The guarantee: whatever is set, if it clears the joins it is one of the
+  // candidates, so the answer can only be at least as good on the measure
+  // being optimised.
+  for (const key of Object.keys(PRESETS)) {
+    for (const stagger of [300, 450, 640, 900]) {
+      const st = cfg({ rects: PRESETS[key].map(r => ({ ...r })), stagger });
+      const r = bestStagger(st);
+      assert.ok(r, `${key} @ ${stagger}: no answer`);
+      assert.ok(r.shortest >= r.from.shortest,
+        `${key} @ ${stagger}: worst end went ${r.from.shortest} -> ${r.shortest}`);
+    }
+  }
+});
+
+test("a stagger that does not clear the joins gets replaced by one that does", () => {
+  // These all leave neighbouring joins closer than 300 mm, 1185 because it is
+  // only 100 mm short of a whole plank. None should survive.
+  for (const stagger of [0, 60, 120, 1185, 1285]) {
+    const r = bestStagger(cfg({ stagger }));
+    assert.ok(joinGap(r.stagger, base.plankL) >= MIN_JOIN - EPS,
+      `${stagger} -> ${r.stagger}, still only ${joinGap(r.stagger, base.plankL)} mm of clearance`);
+  }
+});
+
+test("it improves every preset it is handed", () => {
+  for (const key of Object.keys(PRESETS)) {
+    const st = cfg({ rects: PRESETS[key].map(r => ({ ...r })) });
+    const r = bestStagger(st);
+    assert.ok(r.shortest > r.from.shortest,
+      `${key}: worst end no better, ${r.from.shortest} -> ${r.shortest}`);
+    assert.ok(r.short <= r.from.short,
+      `${key}: more short ends than before, ${r.from.short} -> ${r.short}`);
+  }
+});
+
+test("it only ever picks a stagger that clears the joins", () => {
+  for (const plankL of [1285, 1200, 900, 600]) {
+    const r = bestStagger(cfg({ plankL, stagger: 50 }));
+    assert.ok(r, `no answer for a ${plankL} mm plank`);
+    const need = Math.min(MIN_JOIN, plankL / 3);
+    assert.ok(joinGap(r.stagger, plankL) >= need - EPS,
+      `${plankL} mm plank: chose ${r.stagger}, leaving only ${joinGap(r.stagger, plankL)} mm`);
+  }
+});
+
+test("what it reports is what you get when you apply it", () => {
+  const st = cfg({ stagger: 305 });
+  const r = bestStagger(st);
+  const applied = computeLayout({ ...st, stagger: r.stagger });
+  const e = endScore(applied, st.plankL, MIN_END);
+  assert.equal(e.short, r.short);
+  assert.equal(Math.round(e.shortest), r.shortest);
+  assert.equal(applied.planksUsed, r.planksUsed);
+});
+
+test("pushing the worst end past the limit leaves nothing to count", () => {
+  // The two measures are not independent: no end under the limit is exactly
+  // what a shortest end above the limit means.
+  const st = cfg({ rects: PRESETS.alcove.map(r => ({ ...r })) });
+  const r = bestStagger(st);
+  assert.equal(r.short === 0, r.shortest >= MIN_END);
+});
+
+test("it finds a clean answer where one exists", () => {
+  // A plain rectangle three and a bit planks wide: some staggers finish rows
+  // on slivers and some do not, so there is a real choice to be made.
+  const st = cfg({ rects: [{ x: 0, y: 0, w: 1285 * 3 + 160, h: 192 * 12 }], stagger: 160 });
+  const before = endScore(computeLayout(st), st.plankL, MIN_END);
+  assert.ok(before.short > 0, "the setup was supposed to start off badly");
+  const r = bestStagger(st);
+  assert.ok(r.shortest > before.shortest,
+    `no improvement: worst end ${before.shortest} -> ${r.shortest}`);
+});
+
+test("a tie is settled without moving the stagger about", () => {
+  const st = cfg({ stagger: 300 });
+  const a = bestStagger(st), b = bestStagger(st);
+  assert.deepEqual(a, b);
+  const again = bestStagger(cfg({ stagger: a.stagger }));
+  assert.equal(again.stagger, a.stagger, "asked again from its own answer, it moved");
+});
+
+test("there is nothing to search on herringbone or an unlayable room", () => {
+  assert.equal(bestStagger(cfg({ pattern: "herringbone" })), null);
+  assert.equal(bestStagger(cfg({ rects: [] })), null);
+  assert.equal(bestStagger(cfg({ plankL: 0 })), null);
+  // A room too big to lay has no scores to compare.
+  assert.equal(bestStagger(cfg({ rects: [{ x: 0, y: 0, w: 5e6, h: 5e6 }] })), null);
+});
+
+test("a short plank asks for a third of itself rather than giving up", () => {
+  // 300 mm of clearance either side is impossible on a 300 mm plank, so the
+  // clearance asked for drops with the plank instead of the search failing.
+  const r = bestStagger(cfg({ plankL: 300, plankW: 100, stagger: 10 }));
+  assert.ok(r, "gave up on a short plank");
+  assert.ok(joinGap(r.stagger, 300) >= 100 - EPS,
+    `chose ${r.stagger}, leaving only ${joinGap(r.stagger, 300)} mm`);
+});
+
+test("the search stays bounded on a big floor", () => {
+  const r = bestStagger(cfg({ rects: [{ x: 0, y: 0, w: 40000, h: 30000 }] }));
+  assert.ok(r, "gave up on a large room");
+  assert.ok(r.tried >= 8 && r.tried <= 161, `tried ${r.tried} candidates`);
+  assert.ok(r.step >= 5 && r.step % 5 === 0, `step of ${r.step} mm is not a usable figure`);
 });
 
 /* ---------------------------------------------------------------- */

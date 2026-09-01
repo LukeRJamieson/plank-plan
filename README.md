@@ -68,7 +68,9 @@ nothing has to be scrolled to while you work.
 - Plank direction and starting corner (all eight combinations)
 - A set-out point, so the pattern can start anywhere rather than hard against a
   wall, with one click to balance the two edge rows to the same width
-- Row stagger, and the short end pieces a bad stagger produces
+- Row stagger, and the short end pieces a bad stagger produces — with one
+  click to search for the stagger whose shortest row end is longest, keeping
+  the joins in neighbouring rows a safe distance apart while it does it
 - Offcut reuse — starting each row with the tail of the last one, which on a
   typical L-shaped room is the difference between 7% and 26% waste
 - Rip cuts along the final row and wherever the floor changes depth
