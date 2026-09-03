@@ -3079,14 +3079,20 @@ function closeDimEdit(commit){
 
   /* Hovering a plank still names its size: the overlay takes no pointer
      events, so the piece underneath is what the event lands on. */
+  let tipTimer;
   const showTip = (e) => {
     const t = e.target;
+    clearTimeout(tipTimer);
     if(drag || !(t instanceof SVGElement) || !t.dataset.info){ tip.classList.remove("on"); return; }
     const b = stage.getBoundingClientRect();
     tip.textContent = t.dataset.info;
     tip.style.left = (e.clientX - b.left) + "px";
     tip.style.top  = (e.clientY - b.top)  + "px";
     tip.classList.add("on");
+    // A finger has no mouseleave, so on a touch screen the tooltip would sit
+    // over the drawing until something else was tapped. Give it a moment and
+    // then get out of the way.
+    if(COARSE) tipTimer = setTimeout(() => tip.classList.remove("on"), 2200);
   };
   stage.addEventListener("mousemove", showTip);
   stage.addEventListener("click", showTip);
