@@ -634,6 +634,90 @@ test("the nosing figure counts one per step, and only when asked for", () => {
 });
 
 /* ---------------------------------------------------------------- */
+/* Winders and landings                                             */
+/* ---------------------------------------------------------------- */
+
+const flight = (over = {}) => bld({
+  stairs: { steps: 0, winders: 0, landings: 0, width: 900, tread: 280,
+            riser: 175, mat: "carpet", nosing: true, ...over }
+});
+
+test("a flight of nothing but a landing still counts", () => {
+  const S = computeStairs(flight({ landings: 1 }));
+  assert.ok(S, "a landing on its own was ignored");
+  assert.equal(S.run, 900);                       // a square of the stair width
+  assert.ok(Math.abs(S.area - 0.81) < 1e-9);
+});
+
+test("a winder is cut from a square of the stair width", () => {
+  // The turning tread is a triangle, but the piece that leaves the roll is the
+  // square it is cut from, plus that step's riser.
+  const S = computeStairs(flight({ winders: 3 }));
+  assert.equal(S.winderRun, 3 * (900 + 175));
+  assert.equal(S.run, S.winderRun);
+  assert.ok(S.area > 3 * 900 * (280 + 175) / 1e6,
+    "a winder should take more than a straight step of the same flight");
+});
+
+test("the three kinds of step add up rather than replacing each other", () => {
+  const S = computeStairs(flight({ steps: 8, winders: 3, landings: 1 }));
+  assert.equal(S.straightRun, 8 * 455);
+  assert.equal(S.winderRun, 3 * 1075);
+  assert.equal(S.landingRun, 900);
+  assert.equal(S.run, 8 * 455 + 3 * 1075 + 900);
+  assert.equal(S.rollLength, S.run);              // 900 mm fits one 4 m drop
+});
+
+test("an L-shaped flight is a straight run, a landing and another run", () => {
+  const straight = computeStairs(flight({ steps: 13 }));
+  const turned   = computeStairs(flight({ steps: 13, landings: 1 }));
+  assert.ok(turned.run > straight.run, "the landing added nothing");
+  assert.equal(turned.run - straight.run, 900);
+});
+
+test("a landing has no step, so it gets no nosing", () => {
+  const S = computeStairs(flight({ steps: 8, winders: 3, landings: 2 }));
+  // Eleven steps to finish, and the landings are floor rather than steps.
+  assert.ok(Math.abs(S.nosing - 11 * 0.9) < 1e-9, `got ${S.nosing}`);
+});
+
+test("a laminate winder is clad across its full width", () => {
+  const S = computeStairs(flight({ steps: 0, winders: 1, mat: "laminate" }));
+  // A 900 mm winder takes five 192 mm widths, and its riser takes one.
+  assert.equal(S.pieceCount, Math.ceil(900 / 192) + Math.ceil(175 / 192));
+  assert.equal(S.pieceLen, 900);
+});
+
+test("a laminate landing needs cladding but no riser", () => {
+  const S = computeStairs(flight({ landings: 1, mat: "laminate" }));
+  assert.equal(S.pieceCount, Math.ceil(900 / 192));
+});
+
+test("winders and landings reach the building total", () => {
+  const floors = { name: "G", rects: [{ x: 0, y: 0, w: 3000, h: 3000, mat: "laminate" }] };
+  const plain = computeBuilding(bld({ levels: [floors] }));
+  const turning = computeBuilding(bld({ levels: [floors],
+    stairs: { steps: 8, winders: 3, landings: 1, width: 900, tread: 280,
+              riser: 175, mat: "carpet", nosing: true } }));
+  assert.ok(turning.rollLength > 0);
+  assert.ok(turning.carpetArea > plain.carpetArea);
+  assert.ok(Math.abs(turning.noseMetres - 11 * 0.9) < 1e-9);
+});
+
+test("winders and landings save and reload", () => {
+  const plan = { ...defaultPlan(),
+    stairs: { steps: 8, winders: 3, landings: 2, width: 860, tread: 275,
+              riser: 180, mat: "laminate", nosing: false } };
+  const { plan: back, warnings } = sanitisePlan(serialisePlan(plan));
+  assert.deepEqual(back.stairs, plan.stairs);
+  assert.deepEqual(warnings, []);
+  // And nonsense in those fields falls back rather than breaking the flight.
+  const junk = sanitisePlan({ stairs: { winders: "three", landings: -5 } }).plan;
+  assert.equal(junk.stairs.winders, 0);
+  assert.equal(junk.stairs.landings, 0);
+});
+
+/* ---------------------------------------------------------------- */
 /* Stair nosings                                                    */
 /* ---------------------------------------------------------------- */
 
@@ -824,7 +908,8 @@ test("a saved plan reloads exactly as it was", () => {
       { name: "Loft", rects: [{ x: 0, y: 0, w: 3000, h: 2400, mat: "carpet" }] }
     ],
     rollW: 3660, rollDir: "h", carpetPrice: 24.5,
-    stairs: { steps: 13, width: 860, tread: 275, riser: 180, mat: "carpet", nosing: true },
+    stairs: { steps: 13, winders: 3, landings: 1, width: 860, tread: 275,
+              riser: 180, mat: "carpet", nosing: true },
     noseEdges: [{ level: 0, rect: 0, side: "e" }],
     plankL: 600, plankW: 120, perPack: 10,
     pattern: "herringbone", hbAngle: 135, corner: "br", dir: "v",

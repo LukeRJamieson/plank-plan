@@ -549,8 +549,14 @@ td.row-no{color:var(--ink-dim);width:3rem}
 
     <section class="sec">
       <h2>Stairs <small>mm</small></h2>
-      <div class="field"><label for="stSteps">Number of steps</label>
+      <div class="field"><label for="stSteps">Straight steps</label>
         <input type="number" id="stSteps" value="0" min="0" max="60" step="1"></div>
+      <div class="pair">
+        <div class="field"><label for="stWinders">Winders</label>
+          <input type="number" id="stWinders" value="0" min="0" max="30" step="1"></div>
+        <div class="field"><label for="stLandings">Landings</label>
+          <input type="number" id="stLandings" value="0" min="0" max="10" step="1"></div>
+      </div>
       <div class="pair">
         <div class="field"><label for="stWidth">Width</label>
           <input type="number" id="stWidth" value="900" min="100" step="10"></div>
@@ -568,8 +574,11 @@ td.row-no{color:var(--ink-dim);width:3rem}
       </div>
       <label class="check"><input type="checkbox" id="stNosing" checked>
         <span>A nosing on every step</span></label>
-      <p class="hint">Leave the steps at 0 if there are none. A flight is not part
-        of any floor's footprint, so it is described here rather than drawn.</p>
+      <p class="hint">Leave everything at 0 if there are no stairs. A flight is not
+        part of any floor's footprint, so it is described here rather than drawn.
+        A <b>winder</b> is a turning tread taking a corner instead of a landing;
+        each one is cut from a square of the stair width, because the offcut off a
+        triangular tread will not fit the next.</p>
     </section>
 
     <section class="sec">
@@ -756,7 +765,8 @@ function defaultPlan(){
     rollW: 4000, rollDir: "v",
     // A flight is not part of any floor's footprint, so it is described
     // rather than drawn: it belongs to the building, not to a level.
-    stairs: { steps:0, width:900, tread:280, riser:175, mat:"carpet", nosing:true },
+    stairs: { steps:0, winders:0, landings:0,
+              width:900, tread:280, riser:175, mat:"carpet", nosing:true },
     // Edges marked as a stair nosing, each {level, rect, side}.
     noseEdges: [],
     priceBasis: "pack", price: 0, carpetPrice: 0, currency: "$"
@@ -891,7 +901,9 @@ function sanitisePlan(raw){
   /* ---- stairs ---- */
   const s = (body.stairs && typeof body.stairs === "object") ? body.stairs : {};
   plan.stairs = {
-    steps:  Math.round(num(s.steps, 0, 60, d.stairs.steps)),
+    steps:    Math.round(num(s.steps, 0, 60, d.stairs.steps)),
+    winders:  Math.round(num(s.winders, 0, 30, d.stairs.winders)),
+    landings: Math.round(num(s.landings, 0, 10, d.stairs.landings)),
     width:  num(s.width, 100, 5000, d.stairs.width),
     tread:  num(s.tread, 100, 1000, d.stairs.tread),
     riser:  num(s.riser, 50, 500, d.stairs.riser),
@@ -1561,31 +1573,48 @@ function computeCarpet(st){
    ---------------------------------------------------------------- */
 function computeStairs(st){
   const s = st.stairs || {};
-  const steps = Math.max(0, Math.round(s.steps || 0));
-  if(!steps || !(s.width > 0)) return null;
+  const steps    = Math.max(0, Math.round(s.steps || 0));
+  const winders  = Math.max(0, Math.round(s.winders || 0));
+  const landings = Math.max(0, Math.round(s.landings || 0));
+  if((!steps && !winders && !landings) || !(s.width > 0)) return null;
 
   const mat = MATERIALS.includes(s.mat) ? s.mat : "carpet";
-  const perStep = (s.tread || 0) + (s.riser || 0);   // material run per step
-  const run = steps * perStep;                       // up the whole flight
-  const area = steps * s.width * perStep / 1e6;
-  const nosing = s.nosing ? steps * s.width / 1000 : 0;   // metres
+  const W = s.width, tread = s.tread || 0, riser = s.riser || 0;
 
-  const out = { mat, steps, width:s.width, perStep, run, area, nosing };
+  // How far the covering runs, measured up the flight. A straight step is its
+  // tread plus its riser. A winder is cut from a square of the stair width —
+  // a turning tread is a triangle and the offcut from one will not fit the
+  // next, so the square is what actually leaves the roll. A landing is a
+  // square of the same width.
+  const straightRun = steps * (tread + riser);
+  const winderRun   = winders * (W + riser);
+  const landingRun  = landings * W;
+  const run = straightRun + winderRun + landingRun;
+
+  const area = W * run / 1e6;
+  // Every step gets a nosing; a landing has no step to finish.
+  const nosing = s.nosing ? (steps + winders) * W / 1000 : 0;   // metres
+
+  const out = { mat, steps, winders, landings, width:W,
+                perStep: tread + riser, run, area, nosing,
+                straightRun, winderRun, landingRun };
 
   if(mat === "carpet"){
-    // One length up the flight, as many drops side by side as the width needs.
-    const across = Math.max(1, Math.ceil((s.width - EPS)/Math.max(1, st.rollW)));
+    // One length up the flight so the pile matches on every step, with as many
+    // drops side by side as the width needs.
+    const across = Math.max(1, Math.ceil((W - EPS)/Math.max(1, st.rollW)));
     out.drops = across;
     out.rollLength = across * run;
     out.boughtArea = out.rollLength * st.rollW / 1e6;
   } else {
     // Each face is clad in plank widths running across the stair.
     const pw = Math.max(1, st.plankW);
-    const perTread = Math.ceil(((s.tread || 0) - EPS)/pw);
-    const perRiser = Math.ceil(((s.riser || 0) - EPS)/pw);
-    out.piecesPerStep = perTread + perRiser;
-    out.pieceLen = s.width;
-    out.pieceCount = steps * out.piecesPerStep;
+    const widths = mm => Math.ceil((mm - EPS)/pw);
+    out.piecesPerStep = widths(tread) + widths(riser);
+    out.pieceLen = W;
+    out.pieceCount = steps * out.piecesPerStep
+                   + winders * (widths(W) + widths(riser))
+                   + landings * widths(W);
   }
   return out;
 }
@@ -2920,15 +2949,28 @@ function drawResults(B){
   /* --- stairs --- */
   if(B.stairs){
     const s = B.stairs;
+    const made = [
+      s.steps    ? `<b>${s.steps}</b> straight step${s.steps===1?"":"s"}` : "",
+      s.winders  ? `<b>${s.winders}</b> winder${s.winders===1?"":"s"}` : "",
+      s.landings ? `<b>${s.landings}</b> landing${s.landings===1?"":"s"}` : ""
+    ].filter(Boolean);
+    const flight = made.length > 1
+      ? made.slice(0, -1).join(", ") + " and " + made[made.length-1]
+      : made[0];
     if(s.mat === "carpet"){
-      out.push([false, `The flight of <b>${s.steps}</b> steps needs
-        <b>${(s.rollLength/1000).toFixed(2)} m</b> off the roll — one length up the whole
-        flight so the pile runs the same way on every step, not a piece per tread.`]);
+      out.push([false, `The flight — ${flight} — needs
+        <b>${(s.rollLength/1000).toFixed(2)} m</b> off the roll, one length up the whole
+        run so the pile matches on every step rather than a piece per tread.`]);
     } else {
-      out.push([false, `The flight of <b>${s.steps}</b> steps is clad in
-        <b>${s.pieceCount}</b> pieces of ${mm(s.pieceLen)} mm, ${s.piecesPerStep} per step,
-        and adds <b>${B.stairPlanks}</b> plank${B.stairPlanks===1?"":"s"} to the order. Their
+      out.push([false, `The flight — ${flight} — is clad in
+        <b>${s.pieceCount}</b> pieces of ${mm(s.pieceLen)} mm and adds
+        <b>${B.stairPlanks}</b> plank${B.stairPlanks===1?"":"s"} to the order. Their
         offcuts are counted separately from the floor's — a flight is a different day's work.`]);
+    }
+    if(s.winders){
+      out.push([false, `Each winder is counted as a square of the stair width
+        (${mm(s.width)} mm), which is what actually comes off the roll: a turning tread is a
+        triangle and the offcut from one will not fit the next.`]);
     }
     if(s.nosing){
       out.push([false, `<b>${(s.nosing).toFixed(2)} m</b> of that nosing figure is the flight
@@ -3455,6 +3497,8 @@ function syncInputs(){
   set("rollDir", state.rollDir);
   set("carpetPrice", state.carpetPrice);
   set("stSteps", state.stairs.steps);
+  set("stWinders", state.stairs.winders);
+  set("stLandings", state.stairs.landings);
   set("stWidth", state.stairs.width);
   set("stTread", state.stairs.tread);
   set("stRiser", state.stairs.riser);
@@ -3651,7 +3695,8 @@ document.getElementById("rollDir").addEventListener("change", e => {
 
 /* The flight. Every field lands on the undo stack when it is done with
    rather than on each keystroke. */
-[["stSteps","steps",0],["stWidth","width",100],["stTread","tread",100],["stRiser","riser",50]]
+[["stSteps","steps",0],["stWinders","winders",0],["stLandings","landings",0],
+ ["stWidth","width",100],["stTread","tread",100],["stRiser","riser",50]]
   .forEach(([id, key, min]) => {
     const el = document.getElementById(id);
     el.addEventListener("input", () => {
