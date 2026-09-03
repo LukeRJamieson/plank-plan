@@ -600,14 +600,21 @@ td.row-no{color:var(--ink-dim);width:3rem}
       </div>
       <div class="pair">
         <div class="field">
-          <label for="carpetPrice">Carpet, per m²</label>
+          <label for="carpetBasis">Carpet priced by</label>
+          <select id="carpetBasis">
+            <option value="lm" selected>Metre off the roll</option>
+            <option value="m2">Square metre</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="carpetPrice">Carpet amount</label>
           <div class="money"><span class="cur-sym">$</span>
             <input type="number" id="carpetPrice" value="0" min="0" step="0.01"></div>
         </div>
-        <div class="field">
-          <label for="currency">Currency symbol</label>
-          <input type="text" id="currency" value="$" maxlength="4">
-        </div>
+      </div>
+      <div class="field">
+        <label for="currency">Currency symbol</label>
+        <input type="text" id="currency" value="$" maxlength="4">
       </div>
     </section>
 
@@ -658,6 +665,11 @@ td.row-no{color:var(--ink-dim);width:3rem}
             <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"
                  fill="none" stroke="currentColor" stroke-width="1.6">
               <path d="M2 11h12M2 11V5"/><path d="M2 11l3-3h9" stroke-dasharray="2 2"/></svg>Nose</button>
+          <button class="tbtn" id="lock45" aria-pressed="false"
+                  title="Hold corner cuts at 45° — or hold Shift while dragging one">
+            <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"
+                 fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M2 14h12M2 14V2"/><path d="M2 14 14 2"/></svg>45°</button>
         </div>
         <div class="tool-group gap" role="group" aria-label="Zoom">
           <button class="tbtn wide" id="zoom-out" title="Zoom out — minus key">−</button>
@@ -770,7 +782,8 @@ function defaultPlan(){
               width:900, tread:280, riser:175, mat:"carpet", nosing:true },
     // Edges marked as a stair nosing, each {level, rect, side}.
     noseEdges: [],
-    priceBasis: "pack", price: 0, carpetPrice: 0, currency: "$"
+    priceBasis: "pack", price: 0,
+    carpetBasis: "lm", carpetPrice: 0, currency: "$"
   };
 }
 
@@ -861,6 +874,7 @@ function sanitisePlan(raw){
     noseEdges:  [],
     priceBasis: pick(body.priceBasis, ["pack","plank","m2"], d.priceBasis),
     price:      num(body.price, 0, 1e7, d.price),
+    carpetBasis:pick(body.carpetBasis, ["m2","lm"], d.carpetBasis),
     carpetPrice:num(body.carpetPrice, 0, 1e7, d.carpetPrice),
     currency:   text(body.currency, 4, d.currency)
   };
@@ -2028,7 +2042,12 @@ function computeBuilding(st){
   });
 
   const carpetBought = rollLength * st.rollW / 1e6;
-  const carpetCost = (st.carpetPrice > 0) ? carpetBought * st.carpetPrice : 0;
+  // Carpet is quoted either way. Per linear metre is the metre off the roll,
+  // whatever its width; per square metre is charged on what comes off the roll,
+  // not on the floor it ends up covering.
+  const carpetCost = !(st.carpetPrice > 0) ? 0
+    : st.carpetBasis === "m2" ? carpetBought * st.carpetPrice
+    : (rollLength/1000) * st.carpetPrice;
 
   return {
     mode: "building", levels, stairs, noses, noseMetres,
@@ -2656,6 +2675,7 @@ const HIT_PX   = COARSE ? 22 : 10;    // grab radius for the resize handles
 const MIN_SIDE = 50;                  // mm; the smallest area that can be dragged out
 
 let tool = "select";
+let lock45 = false;        // hold corner cuts square to 45 degrees
 let drag = null;
 let editing = null;
 const pointers = new Map();
@@ -2788,6 +2808,13 @@ function drawHud(){
     const r = drag.ghost;
     html = r ? `New area <b>${lenLabel(r.w)} × ${lenLabel(r.h)}</b>`
              : "Drag out the new area";
+  } else if(drag && drag.mode === "cut"){
+    const c = cutOf(state.rects[drag.i]);
+    html = c
+      ? `${letter(drag.i)} corner &nbsp;<b>${lenLabel(c.dx)} × ${lenLabel(c.dy)}</b>` +
+        ` &nbsp;${(Math.atan2(c.dy, c.dx)*180/Math.PI).toFixed(1)}°` +
+        ((lock45 || drag.shift) ? " &nbsp;· held at 45°" : "")
+      : `${letter(drag.i)} — drag in to slice the corner off`;
   } else if(drag && (drag.mode === "move" || drag.mode === "resize")){
     const r = state.rects[drag.i];
     html = `${letter(drag.i)} &nbsp;<b>${lenLabel(r.w)} × ${lenLabel(r.h)}</b>` +
@@ -2925,6 +2952,8 @@ function closeDimEdit(commit){
   stage.addEventListener("pointermove", e => {
     if(pointers.has(e.pointerId)) pointers.set(e.pointerId, {x:e.clientX, y:e.clientY});
     if(pinch){ movePinch(); return; }
+    // Read live, so Shift can be pressed or let go part-way through a drag.
+    if(drag) drag.shift = e.shiftKey;
 
     const p = toWorld(e.clientX, e.clientY);
     if(!drag){
@@ -2980,8 +3009,15 @@ function closeDimEdit(commit){
       // The handle sits on the middle of the slice and follows the finger, so
       // the slice itself grows at twice the distance dragged.
       const round = v => Math.max(0, Math.round(v/GRID)*GRID);
-      const dx = Math.min(round(2*(east ? cx - p.x : p.x - cx)), r.w);
-      const dy = Math.min(round(2*(south ? cy - p.y : p.y - cy)), r.h);
+      let dx = Math.min(round(2*(east ? cx - p.x : p.x - cx)), r.w);
+      let dy = Math.min(round(2*(south ? cy - p.y : p.y - cy)), r.h);
+      // Locked, the two offsets are equal, which is what makes the wall 45°.
+      // The average rather than one or the other, so the cut grows smoothly
+      // whichever way the drag happens to be going.
+      if(lock45 || drag.shift){
+        const d = Math.min(round((dx + dy)/2), r.w, r.h);
+        dx = d; dy = d;
+      }
       const next = {x:r.x, y:r.y, w:r.w, h:r.h, mat:matOf(r)};
       // Dragged back into its corner, the slice is gone rather than tiny.
       if(dx >= GRID && dy >= GRID) next.cut = {corner:drag.corner, dx, dy};
@@ -3067,6 +3103,15 @@ function setTool(t){
   drawHud();
 }
 
+/* A 45 degree chamfer is the one angle people actually ask a joiner for, and
+   it is fiddly to hit by hand. The toggle is for a touch screen, where there is
+   no Shift to hold. */
+function setLock45(on){
+  lock45 = !!on;
+  document.getElementById("lock45").setAttribute("aria-pressed", String(lock45));
+  drawHud();
+}
+
 function deleteSelected(){
   const i = state.focusRect;
   if(i < 0 || !state.rects[i]) return;
@@ -3133,6 +3178,7 @@ document.addEventListener("keydown", e => {
 document.getElementById("tool-select").addEventListener("click", () => setTool("select"));
 document.getElementById("tool-draw").addEventListener("click", () => setTool("draw"));
 document.getElementById("tool-nose").addEventListener("click", () => setTool("nose"));
+document.getElementById("lock45").addEventListener("click", () => setLock45(!lock45));
 document.getElementById("undo-btn").addEventListener("click", undo);
 document.getElementById("redo-btn").addEventListener("click", redo);
 document.getElementById("level-pick").addEventListener("change", e => goLevel(+e.target.value));
@@ -3255,9 +3301,13 @@ function drawResults(B){
         ${state.priceBasis === "m2" ? "per m²" : "each"}`);
     }
     if(anyCarpet && B.carpetCost > 0){
-      bits.push(`${money(B.carpetCost)} is ${m2(B.carpetBought)} m² of carpet off the roll
-        at ${money(state.carpetPrice)} per m² — you pay for the full width of every drop,
-        not the part that lands on the floor`);
+      bits.push(state.carpetBasis === "lm"
+        ? `${money(B.carpetCost)} is ${B.rollLengthM.toFixed(2)} m off a ${mm(state.rollW)} mm
+           roll at ${money(state.carpetPrice)} the metre — the roll is sold by its length
+           whatever you use across its width`
+        : `${money(B.carpetCost)} is ${m2(B.carpetBought)} m² of carpet off the roll at
+           ${money(state.carpetPrice)} per m² — you pay for the full width of every drop,
+           not the part that lands on the floor`);
     }
     out.push([false, bits.join(". ") + "."]);
   }
@@ -3827,6 +3877,7 @@ function syncInputs(){
   set("currency", state.currency);
   set("rollW", state.rollW);
   set("rollDir", state.rollDir);
+  set("carpetBasis", state.carpetBasis);
   set("carpetPrice", state.carpetPrice);
   set("stSteps", state.stairs.steps);
   set("stWinders", state.stairs.winders);
@@ -4021,6 +4072,9 @@ document.getElementById("currency").addEventListener("input", e => {
 });
 bindNumber("rollW","rollW",500);
 bindNumber("carpetPrice","carpetPrice",0);
+document.getElementById("carpetBasis").addEventListener("change", e => {
+  state.carpetBasis = e.target.value; refresh();
+});
 document.getElementById("rollDir").addEventListener("change", e => {
   state.rollDir = e.target.value; refresh();
 });

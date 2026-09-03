@@ -92,6 +92,12 @@ the furthest point, and the rip check is what notices the band is not full
 depth. Both clip the area's polygon rather than working four corners out by
 hand.
 
+A corner cut can be **held at 45°** — the toolbar toggle for a touch screen,
+Shift for a mouse, read live off the pointer event so it can be pressed or let
+go part-way through a drag. Locked, `dx` and `dy` are both set to the average
+of the two rather than to one of them, so the cut grows smoothly whichever way
+the drag is going.
+
 A cut travels with its area through the plank transform and the carpet swap.
 `swapAxes` is shared by both for exactly that reason — an earlier draft had
 `computeCarpet` swapping with its own helper, which silently dropped the cut
@@ -488,6 +494,10 @@ Don't "fix" these without asking — they are choices, not oversights.
   presentation of an estimate.
 - **No chevron.** Chevron needs planks mitred at the ends — a different product
   and a different cut list. Herringbone uses square-ended planks.
+- **Carpet is priced by the metre off the roll or by the square metre**, and
+  both are charged on what leaves the roll rather than on the floor it ends up
+  covering — which is how it is actually sold. On a 4 m roll the square-metre
+  figure is four times the linear one.
 - **Pricing assumes whole packs.** `planksBought = packs * perPack`, so per-plank
   and per-m² prices are charged on what you take home, not what you lay. Set
   planks per pack to 1 for loose planks.

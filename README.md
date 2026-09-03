@@ -51,6 +51,7 @@ The plan is a proper drawing surface, not a picture of the answer.
 | Draw a new area | **Draw** or `D`, then drag one out | **Draw**, then drag |
 | Mark a stair nosing | **Nose** or `N`, then click an edge | **Nose**, then tap |
 | Slice a corner off | Drag the diamond just inside that corner | Same |
+| Hold a slice at 45° | Hold `Shift` while dragging, or the **45°** toggle | The **45°** toggle |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z`, or the toolbar | The toolbar |
 | Change level | The picker on the plan toolbar | Same |
 | Nudge | Arrow keys, 10 mm, or 100 mm with shift | — |
@@ -108,6 +109,7 @@ how many metres you need and which two materials it transitions between.
 - Rip cuts along the final row and wherever the floor changes depth
 - Packs to buy, with a configurable allowance for damage and mistakes
 - Cost, priced per pack, per plank or per square metre, charged on whole packs
+- Carpet cost, by the metre off the roll or by the square metre
 
 Plans save to a `.json` file you can keep with the job, email on, or reload
 later. There is no browser storage, so a saved plan is portable and nothing is

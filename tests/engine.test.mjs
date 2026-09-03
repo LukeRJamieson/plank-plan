@@ -1025,12 +1025,46 @@ test("cost adds the two materials together", () => {
     ]}],
     priceBasis: "pack", price: 30, carpetPrice: 20
   });
-  const B = computeBuilding(st);
+  const B = computeBuilding({ ...st, carpetBasis: "m2" });
   assert.ok(B.plankCost > 0 && B.carpetCost > 0);
   assert.ok(Math.abs(B.cost - (B.plankCost + B.carpetCost)) < 1e-9);
   // Carpet is charged on what comes off the roll, not on the floor it covers.
   assert.ok(Math.abs(B.carpetCost - B.carpetBought * 20) < 1e-9);
   assert.ok(B.carpetBought >= B.carpetArea);
+});
+
+test("carpet can be priced by the metre off the roll instead", () => {
+  const st = bld({
+    levels: [{ name: "G", rects: [{ x: 0, y: 0, w: 5000, h: 3000, mat: "carpet" }] }],
+    carpetPrice: 24
+  });
+  const perMetre = computeBuilding({ ...st, carpetBasis: "lm" });
+  const perSquare = computeBuilding({ ...st, carpetBasis: "m2" });
+  assert.ok(Math.abs(perMetre.carpetCost - perMetre.rollLengthM * 24) < 1e-9);
+  assert.ok(Math.abs(perSquare.carpetCost - perSquare.carpetBought * 24) < 1e-9);
+  // The same figure charged two ways: a 4 m roll is 4 m² to the linear metre.
+  assert.ok(Math.abs(perSquare.carpetCost - perMetre.carpetCost * 4) < 1e-9,
+    `${perSquare.carpetCost} against ${perMetre.carpetCost}`);
+});
+
+test("no carpet price means no carpet cost, whichever basis", () => {
+  for (const carpetBasis of ["lm", "m2"]) {
+    const B = computeBuilding(bld({
+      levels: [{ name: "G", rects: [{ x: 0, y: 0, w: 3000, h: 3000, mat: "carpet" }] }],
+      carpetBasis, carpetPrice: 0
+    }));
+    assert.equal(B.carpetCost, 0);
+    assert.equal(B.cost, B.plankCost);
+  }
+});
+
+test("the carpet pricing basis saves and reloads", () => {
+  const plan = { ...defaultPlan(), carpetBasis: "m2", carpetPrice: 31.5 };
+  const { plan: back } = sanitisePlan(serialisePlan(plan));
+  assert.equal(back.carpetBasis, "m2");
+  assert.equal(back.carpetPrice, 31.5);
+  assert.equal(sanitisePlan({ carpetBasis: "per yard" }).plan.carpetBasis,
+    defaultPlan().carpetBasis);
 });
 
 /* ---------------------------------------------------------------- */
