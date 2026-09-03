@@ -737,7 +737,8 @@ const PRESETS = {
    hostile until proved otherwise.
    ---------------------------------------------------------------- */
 const PLAN_FORMAT = "plank-plan";
-const PLAN_VERSION = 2;          // 2 added levels, materials, stairs and nosing
+const PLAN_VERSION = 3;          // 2 added levels, materials, stairs and nosing
+                                 // 3 added angled corners on an area
 const MAX_AREAS = 40;            // per level
 const MAX_LEVELS = 12;
 const MAX_NOSE = 200;
@@ -794,7 +795,12 @@ function serialisePlan(st){
   for(const k of Object.keys(d)) plan[k] = st[k] !== undefined ? st[k] : d[k];
   plan.levels = (st.levels || d.levels).map(lv => ({
     name: lv.name,
-    rects: (lv.rects || []).map(r => ({x:r.x, y:r.y, w:r.w, h:r.h, mat:matOf(r)}))
+    rects: (lv.rects || []).map(r => {
+      const out = {x:r.x, y:r.y, w:r.w, h:r.h, mat:matOf(r)};
+      const c = cutOf(r);
+      if(c) out.cut = {corner:c.corner, dx:c.dx, dy:c.dy};
+      return out;
+    })
   }));
   plan.stairs = {...d.stairs, ...(st.stairs || {})};
   plan.noseEdges = (st.noseEdges || []).map(n => ({level:n.level, rect:n.rect, side:n.side}));
@@ -876,7 +882,13 @@ function sanitisePlan(raw){
         const w = Number(r && r.w), h = Number(r && r.h);
         const sane = [x,y,w,h].every(Number.isFinite) && w > 0 && h > 0 &&
                      Math.abs(x) <= 1e6 && Math.abs(y) <= 1e6 && w <= 1e6 && h <= 1e6;
-        if(sane) rects.push({x, y, w, h, mat: matOf(r)}); else dropped++;
+        if(!sane){ dropped++; continue; }
+        const area = {x, y, w, h, mat: matOf(r)};
+        // A cut is only kept if it names a real corner and actually removes
+        // something; anything else is quietly a plain rectangle.
+        const c = cutOf({x, y, w, h, cut: r && r.cut});
+        if(c) area.cut = c;
+        rects.push(area);
       }
       plan.levels.push({
         name: text(lv && lv.name, 40, `Level ${plan.levels.length + 1}`),
@@ -976,10 +988,231 @@ function disjointRects(rects){
   return out;
 }
 
-/** True area of a union of rectangles, overlaps counted once. */
-function unionArea(rects){
-  return disjointRects(rects).reduce((s,r) => s + r.w*r.h, 0);
+/* ---------- areas with an angled corner -------------------------
+   An area is a rectangle with, at most, one corner sliced off by a
+   straight line. That is enough for a chamfered corner, an angled bay
+   or a triangular room, and unions of them cover the rest — which is
+   the same trick the app already plays with L-shapes.
+
+   One cut per area, deliberately. Two corners off one room is two
+   areas, exactly as an L-shape is two areas, and keeping it to one
+   makes the removed region a single triangle: that is what lets the
+   floor be decomposed exactly rather than approximately.
+
+   `cut` is {corner, dx, dy}: how far in from that corner the slice
+   starts along each axis.
+   ---------------------------------------------------------------- */
+const CORNERS = ["nw", "ne", "se", "sw"];
+
+/** An area's cut, if it has one that actually removes anything. */
+function cutOf(r){
+  const c = r && r.cut;
+  if(!c || !CORNERS.includes(c.corner)) return null;
+  const dx = Math.min(Math.max(0, Number(c.dx) || 0), r.w);
+  const dy = Math.min(Math.max(0, Number(c.dy) || 0), r.h);
+  if(dx <= EPS || dy <= EPS) return null;
+  return { corner: c.corner, dx, dy };
 }
+
+/** The triangle a cut removes, in room coordinates, or null. */
+function cutTriangle(r){
+  const c = cutOf(r);
+  if(!c) return null;
+  const x1 = r.x + r.w, y1 = r.y + r.h;
+  switch(c.corner){
+    case "nw": return [{x:r.x, y:r.y}, {x:r.x + c.dx, y:r.y}, {x:r.x, y:r.y + c.dy}];
+    case "ne": return [{x:x1, y:r.y}, {x:x1, y:r.y + c.dy}, {x:x1 - c.dx, y:r.y}];
+    case "se": return [{x:x1, y:y1}, {x:x1 - c.dx, y:y1}, {x:x1, y:y1 - c.dy}];
+    default:   return [{x:r.x, y:y1}, {x:r.x, y:y1 - c.dy}, {x:r.x + c.dx, y:y1}];
+  }
+}
+
+/** An area as a polygon: four corners, or five with one sliced off. */
+function shapePoly(r){
+  const c = cutOf(r);
+  const x1 = r.x + r.w, y1 = r.y + r.h;
+  if(!c) return [{x:r.x, y:r.y}, {x:x1, y:r.y}, {x:x1, y:y1}, {x:r.x, y:y1}];
+  switch(c.corner){
+    case "nw": return [{x:r.x + c.dx, y:r.y}, {x:x1, y:r.y}, {x:x1, y:y1},
+                       {x:r.x, y:y1}, {x:r.x, y:r.y + c.dy}];
+    case "ne": return [{x:r.x, y:r.y}, {x:x1 - c.dx, y:r.y}, {x:x1, y:r.y + c.dy},
+                       {x:x1, y:y1}, {x:r.x, y:y1}];
+    case "se": return [{x:r.x, y:r.y}, {x:x1, y:r.y}, {x:x1, y:y1 - c.dy},
+                       {x:x1 - c.dx, y:y1}, {x:r.x, y:y1}];
+    default:   return [{x:r.x, y:r.y}, {x:x1, y:r.y}, {x:x1, y:y1},
+                       {x:r.x + c.dx, y:y1}, {x:r.x, y:y1 - c.dy}];
+  }
+}
+
+/** How much floor one area is on its own. */
+function shapeArea(r){
+  const c = cutOf(r);
+  return r.w*r.h - (c ? c.dx*c.dy/2 : 0);
+}
+
+/** Is a point on this area's floor? The cut corner is not. */
+function inShape(r, p){
+  if(p.x < r.x || p.x > r.x + r.w || p.y < r.y || p.y > r.y + r.h) return false;
+  const t = cutTriangle(r);
+  return !t || !inTriangle(t, p);
+}
+
+function inTriangle(t, p){
+  const sign = (a,b,c) => (a.x-c.x)*(b.y-c.y) - (b.x-c.x)*(a.y-c.y);
+  const d1 = sign(p, t[0], t[1]), d2 = sign(p, t[1], t[2]), d3 = sign(p, t[2], t[0]);
+  const neg = (d1 < -EPS) || (d2 < -EPS) || (d3 < -EPS);
+  const pos = (d1 > EPS) || (d2 > EPS) || (d3 > EPS);
+  return !(neg && pos);
+}
+
+/**
+ * Sutherland–Hodgman against any convex polygon, not just a rectangle.
+ * The clip polygon's winding decides which side is inside, so it is
+ * normalised here rather than trusted.
+ */
+function clipToPoly(poly, clip){
+  if(poly.length < 3 || clip.length < 3) return [];
+  // Anticlockwise in screen coordinates (y down) means a negative shoelace.
+  let area = 0;
+  for(let i=0;i<clip.length;i++){
+    const q = clip[(i+1) % clip.length];
+    area += clip[i].x*q.y - q.x*clip[i].y;
+  }
+  const c = area < 0 ? clip.slice().reverse() : clip;
+
+  let out = poly;
+  for(let i=0;i<c.length;i++){
+    if(out.length < 3) return [];
+    const a = c[i], b = c[(i+1) % c.length];
+    // Inside is to the right of a->b for this winding.
+    const side = p => (b.x-a.x)*(p.y-a.y) - (b.y-a.y)*(p.x-a.x);
+    const inp = out; out = [];
+    for(let j=0;j<inp.length;j++){
+      const p = inp[j], q = inp[(j+1) % inp.length];
+      const sp = side(p), sq = side(q);
+      if(sp >= -EPS) out.push(p);
+      if((sp > EPS && sq < -EPS) || (sp < -EPS && sq > EPS)){
+        const t = sp/(sp - sq);
+        out.push({x: p.x + t*(q.x - p.x), y: p.y + t*(q.y - p.y)});
+      }
+    }
+  }
+  return out.length >= 3 ? out : [];
+}
+
+/**
+ * The floor, as disjoint cells.
+ *
+ * Each cell is one of the axis-aligned rectangles the bounding boxes
+ * decompose into, together with the convex `hole` cut out of it. A point
+ * inside a cell is floor unless *every* area reaching it has sliced that
+ * point away — so the hole is the intersection of the owners' triangles,
+ * and an intersection of convex shapes is convex, which is what keeps
+ * this exact rather than approximate.
+ *
+ * Both the area sum and the herringbone clipper read this, so the two
+ * can never disagree about how much floor there is.
+ */
+function floorCells(rects){
+  if(!rects.length) return [];
+  // A full grid rather than disjointRects, because that merges the y-intervals
+  // of *different* areas: two rooms stacked one above the other come back as a
+  // single cell that neither of them contains, and then there is no owner to
+  // ask about the cut. Slicing on every edge keeps each cell inside whichever
+  // areas reach it.
+  const xs = [...new Set(rects.flatMap(r => [r.x, r.x + r.w]))].sort((a,b) => a-b);
+  const ys = [...new Set(rects.flatMap(r => [r.y, r.y + r.h]))].sort((a,b) => a-b);
+  const cells = [];
+  for(let i=0;i<xs.length-1;i++){
+    const x0 = xs[i], x1 = xs[i+1];
+    if(x1 - x0 <= EPS) continue;
+    for(let j=0;j<ys.length-1;j++){
+      const y0 = ys[j], y1 = ys[j+1];
+      if(y1 - y0 <= EPS) continue;
+      const owners = rects.filter(r =>
+        r.x <= x0 + EPS && r.x + r.w >= x1 - EPS &&
+        r.y <= y0 + EPS && r.y + r.h >= y1 - EPS);
+      if(!owners.length) continue;               // no area reaches here
+      const R = {x:x0, y:y0, w:x1-x0, h:y1-y0};
+      let hole = [{x:x0, y:y0}, {x:x1, y:y0}, {x:x1, y:y1}, {x:x0, y:y1}];
+      for(const r of owners){
+        const t = cutTriangle(r);
+        if(!t){ hole = []; break; }        // this area covers the cell whole
+        hole = clipToPoly(hole, t);
+        if(hole.length < 3){ hole = []; break; }
+      }
+      cells.push({ rect: R, hole });
+    }
+  }
+  return cells;
+}
+
+/** True area of a union of areas, overlaps counted once, cuts taken off. */
+function unionArea(rects){
+  return floorCells(rects).reduce(
+    (s,c) => s + c.rect.w*c.rect.h - (c.hole.length >= 3 ? polyArea(c.hole) : 0), 0);
+}
+
+/** The same, but only the part inside a band. */
+function unionAreaIn(rects, band){
+  let total = 0;
+  for(const c of floorCells(rects)){
+    const x0 = Math.max(c.rect.x, band.x), x1 = Math.min(c.rect.x + c.rect.w, band.x + band.w);
+    const y0 = Math.max(c.rect.y, band.y), y1 = Math.min(c.rect.y + c.rect.h, band.y + band.h);
+    if(x1 - x0 <= EPS || y1 - y0 <= EPS) continue;
+    total += (x1-x0)*(y1-y0);
+    if(c.hole.length >= 3){
+      const h = clipToRect(c.hole, {x:x0, y:y0, w:x1-x0, h:y1-y0});
+      if(h.length >= 3) total -= polyArea(h);
+    }
+  }
+  return total;
+}
+
+/* Swapping the axes exchanges north with west and east with south, so a cut
+   corner has to be renamed as well as having its two offsets exchanged. Both
+   the plank transform and the carpet sweep swap axes; sharing this is what
+   stops one of them quietly losing the cut. */
+const SWAP_CORNER = {nw:"nw", ne:"sw", se:"se", sw:"ne"};
+
+function swapAxes(r){
+  const out = {x:r.y, y:r.x, w:r.h, h:r.w};
+  const c = cutOf(r);
+  if(c) out.cut = {corner:SWAP_CORNER[c.corner], dx:c.dy, dy:c.dx};
+  return out;
+}
+
+/** The same envelope, taken the other way: how far an area reaches along y
+    within a vertical strip. Carpet drops run down the room, so its bands ask
+    this question rather than the one spanAt answers. */
+function spanAcross(r, x0, x1){
+  if(r.x >= x1 - EPS || r.x + r.w <= x0 + EPS) return null;
+  if(!cutOf(r)) return [r.y, r.y + r.h];
+  const p = clipToRect(shapePoly(r), {x:x0, y:r.y - 1, w:x1 - x0, h:r.h + 2});
+  if(p.length < 3) return null;
+  let lo = Infinity, hi = -Infinity;
+  for(const q of p){ if(q.y < lo) lo = q.y; if(q.y > hi) hi = q.y; }
+  return hi - lo > EPS ? [lo, hi] : null;
+}
+
+/**
+ * How far across an area the floor reaches within a band of rows.
+ *
+ * The envelope, not the guaranteed depth: where a cut slopes through the
+ * band the planks still run out to the furthest point, and the rip check
+ * is what notices the band is not full depth. Clipping the area's polygon
+ * is exact and saves working the geometry of four corners out by hand.
+ */
+function spanAt(r, y0, y1){
+  if(r.y >= y1 - EPS || r.y + r.h <= y0 + EPS) return null;
+  if(!cutOf(r)) return [r.x, r.x + r.w];
+  const p = clipToRect(shapePoly(r), {x:r.x - 1, y:y0, w:r.w + 2, h:y1 - y0});
+  if(p.length < 3) return null;
+  let lo = Infinity, hi = -Infinity;
+  for(const q of p){ if(q.x < lo) lo = q.x; if(q.x > hi) hi = q.x; }
+  return hi - lo > EPS ? [lo, hi] : null;
+}
+
 
 /** Shoelace area of a simple polygon given as [{x,y},...]. */
 function polyArea(p){
@@ -1099,14 +1332,37 @@ function makeTransform(rects, dir, corner){
   const mirrorX = swap ? bottom : right;
   const mirrorY = swap ? right  : bottom;
 
-  const sw = r => swap ? {x:r.y, y:r.x, w:r.h, h:r.w} : {x:r.x, y:r.y, w:r.w, h:r.h};
+  /* A cut corner has to travel with its area. Swapping the axes exchanges
+     north with west and east with south; mirroring exchanges the two ends of
+     whichever axis it flips. Each mapping is its own inverse, like the
+     transform itself, so the round trip still comes back where it started. */
+  const MIRX_C = {nw:"ne", ne:"nw", se:"sw", sw:"se"};
+  const MIRY_C = {nw:"sw", sw:"nw", ne:"se", se:"ne"};
+
+  const sw = r => {
+    if(swap) return swapAxes(r);
+    const out = {x:r.x, y:r.y, w:r.w, h:r.h};
+    const c = cutOf(r);
+    if(c) out.cut = {...c};
+    return out;
+  };
   const bb = bboxOf(rects.map(sw));   // bounding box in swapped space
 
-  const mir = r => ({
-    x: mirrorX ? (2*bb.x + bb.w - r.x - r.w) : r.x,
-    y: mirrorY ? (2*bb.y + bb.h - r.y - r.h) : r.y,
-    w: r.w, h: r.h
-  });
+  const mir = r => {
+    const out = {
+      x: mirrorX ? (2*bb.x + bb.w - r.x - r.w) : r.x,
+      y: mirrorY ? (2*bb.y + bb.h - r.y - r.h) : r.y,
+      w: r.w, h: r.h
+    };
+    const c = cutOf(r);
+    if(c){
+      let corner = c.corner;
+      if(mirrorX) corner = MIRX_C[corner];
+      if(mirrorY) corner = MIRY_C[corner];
+      out.cut = {corner, dx:c.dx, dy:c.dy};
+    }
+    return out;
+  };
 
   return {
     bb,
@@ -1228,7 +1484,7 @@ function computeHerringbone(st){
 
   if((i1-i0+1) * (j1-j0+1) * 2 > 120000) return { overflow:true, bb };
 
-  const parts  = disjointRects(st.rects);
+  const cells  = floorCells(st.rects);
   const pieces = [];
   // Where the lattice merely grazes a wall it leaves a sliver too small to
   // be a piece of flooring. Those are dropped, but the area is kept so the
@@ -1244,9 +1500,15 @@ function computeHerringbone(st){
         const quad = [{x:rx,y:ry},{x:rx+rw,y:ry},{x:rx+rw,y:ry+rh},{x:rx,y:ry+rh}].map(toRoom);
 
         let area = 0;
-        for(const part of parts){
-          const c = clipToRect(quad, part);
-          if(c.length >= 3) area += polyArea(c);
+        for(const cell of cells){
+          const c = clipToRect(quad, cell.rect);
+          if(c.length < 3) continue;
+          area += polyArea(c);
+          if(cell.hole.length >= 3){
+            // The part of this cell an angled corner has taken away.
+            const h = clipToPoly(c, cell.hole);
+            if(h.length >= 3) area -= polyArea(h);
+          }
         }
         if(area <= whole*5e-4){ sliverArea += area; continue; }
 
@@ -1318,21 +1580,18 @@ function computeStraight(st){
     const y0 = rowStart + k*plankW;
     const y1 = y0 + plankW;
 
-    // Which parts of this band actually have floor under them?
+    // Which parts of this band actually have floor under them? An angled
+    // corner makes that span shorter down the slope, which is exactly the
+    // sort of row the rip check below is looking for.
     const covered = unionIntervals(
-      pr.filter(r => r.y < y1 - EPS && r.y + r.h > y0 + EPS)
-        .map(r => [r.x, r.x + r.w])
+      pr.map(r => spanAt(r, y0, y1)).filter(Boolean)
     );
     if(!covered.length){ rows.push({index:i, y0, pieces:[]}); continue; }
 
     // Rip check: does the floor fill the full depth of this band everywhere?
-    const clipped = pr.map(r => ({
-      x:r.x, w:r.w,
-      y:Math.max(r.y,y0),
-      h:Math.min(r.y+r.h,y1) - Math.max(r.y,y0)
-    })).filter(r => r.h > EPS);
     const bandWidth = covered.reduce((s,[a,b]) => s + (b-a), 0);
-    if(unionArea(clipped) < bandWidth*plankW - 1) ripRows++;
+    const bandArea = unionAreaIn(pr, {x:bb.x - 1, y:y0, w:bb.w + 2, h:plankW});
+    if(bandArea < bandWidth*plankW - 1) ripRows++;
 
     // The plank grid for this row: an infinite repeat of plankL, shifted by
     // the stagger so each row starts a little further along, and by the set-out
@@ -1521,7 +1780,7 @@ function computeCarpet(st){
   // along x. Swapping the axes is the only difference between the two
   // directions, exactly as it is for planks.
   const swap = st.rollDir === "h";
-  const sw = r => swap ? {x:r.y, y:r.x, w:r.h, h:r.w} : {x:r.x, y:r.y, w:r.w, h:r.h};
+  const sw = r => swap ? swapAxes(r) : {...r};
   const cr = rects.map(sw);
   const bb = bboxOf(cr);
 
@@ -1533,9 +1792,11 @@ function computeCarpet(st){
     const x0 = bb.x + k*rollW;
     const x1 = Math.min(bb.x + bb.w, x0 + rollW);
     if(x1 - x0 <= EPS) continue;
+    // The band runs along y here, so the areas are asked for their extent
+    // across it — the same envelope question the plank sweep asks, turned.
     const spans = unionIntervals(
       cr.filter(r => r.x < x1 - EPS && r.x + r.w > x0 + EPS)
-        .map(r => [r.y, r.y + r.h])
+        .map(r => spanAcross(r, x0, x1)).filter(Boolean)
     );
     for(const [a,b] of spans){
       const d = {band:k, x:x0, y:a, w:x1 - x0, len:b - a};
@@ -1825,7 +2086,15 @@ let history = [], histAt = -1, histHold = false;
 function roomSnapshot(){
   return JSON.stringify({
     levels: state.levels.map(lv => ({
-      name: lv.name, rects: lv.rects.map(r => ({x:r.x, y:r.y, w:r.w, h:r.h, mat:matOf(r)}))
+      name: lv.name,
+      // The cut has to be in here, or slicing a corner leaves the snapshot
+      // identical to the one before it and undo has nothing to go back to.
+      rects: lv.rects.map(r => {
+        const out = {x:r.x, y:r.y, w:r.w, h:r.h, mat:matOf(r)};
+        const c = cutOf(r);
+        if(c) out.cut = {corner:c.corner, dx:c.dx, dy:c.dy};
+        return out;
+      })
     })),
     stairs: {...state.stairs},
     noseEdges: state.noseEdges.map(n => ({...n})),
@@ -2023,6 +2292,7 @@ function ensureVisible(r){
 /* ---- the plan drawing ---- */
 const HANDLES = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
 let chipHits = [];            // the on-plan dimension chips, in room coordinates
+let cutHits  = [];            // and the handles that slice a corner off
 
 const letter   = i => String.fromCharCode(65 + i);
 const lenLabel = v => state.units === "m" ? (v/1000).toFixed(2) + " m" : mm(v);
@@ -2031,6 +2301,7 @@ function drawPlan(L, opts){
   const svg = document.getElementById("plan");
   svg.innerHTML = "";
   chipHits = [];
+  cutHits = [];
   const quick = !!(opts && opts.quick);
   if(!state.rects.length){ svg.setAttribute("viewBox", "0 0 100 60"); return; }
 
@@ -2050,15 +2321,23 @@ function drawPlan(L, opts){
   const fs = px(COARSE ? 14 : 12);
   const bbReal = bboxOf(state.rects);
 
+  // An area is a rectangle unless a corner has been sliced off it, in which
+  // case it is a five-sided polygon. Everything that draws the floor goes
+  // through here so the two cannot get out of step.
+  const shape = (r, attrs, parent) => cutOf(r)
+    ? el("polygon", {points: shapePoly(r).map(q => q.x + "," + q.y).join(" "), ...attrs}, parent)
+    : el("rect", {x:r.x, y:r.y, width:r.w, height:r.h, ...attrs}, parent);
+
   // The storey below, as an outline only. Upstairs almost always has to line
   // up with downstairs, and a ghost is how you check without leaving the level
   // you are drawing on.
   if(state.level > 0){
-    levelRects(state, state.level - 1).forEach(r => el("rect", {
-      x:r.x, y:r.y, width:r.w, height:r.h, fill:"none",
-      stroke:"var(--ink-dim)", "stroke-width":1, "stroke-dasharray":"3 5",
-      "vector-effect":"non-scaling-stroke", opacity:.45
-    }));
+    levelRects(state, state.level - 1).forEach(r => {
+      const ghost = {fill:"none", stroke:"var(--ink-dim)", "stroke-width":1,
+        "stroke-dasharray":"3 5", "vector-effect":"non-scaling-stroke", opacity:.45};
+      cutOf(r) ? el("polygon", {points: shapePoly(r).map(q => q.x + "," + q.y).join(" "), ...ghost})
+               : el("rect", {x:r.x, y:r.y, width:r.w, height:r.h, ...ghost});
+    });
   }
 
   // Each material is clipped to its own areas, so planks stop at the carpet
@@ -2067,16 +2346,13 @@ function drawPlan(L, opts){
   const car = state.rects.filter(r => matOf(r) === "carpet");
   const defs = el("defs", {});
   const clip = el("clipPath", {id:"floor"}, defs);
-  (lam.length ? lam : [{x:0,y:0,w:0,h:0}]).forEach(r =>
-    el("rect", {x:r.x, y:r.y, width:r.w, height:r.h}, clip));
+  (lam.length ? lam : [{x:0,y:0,w:0,h:0}]).forEach(r => shape(r, {}, clip));
   const cclip = el("clipPath", {id:"carpetfloor"}, defs);
-  (car.length ? car : [{x:0,y:0,w:0,h:0}]).forEach(r =>
-    el("rect", {x:r.x, y:r.y, width:r.w, height:r.h}, cclip));
+  (car.length ? car : [{x:0,y:0,w:0,h:0}]).forEach(r => shape(r, {}, cclip));
 
   // Floor slab under everything, tinted by what is going down on it.
   const slab = el("g", {});
-  state.rects.forEach((r,i) => el("rect", {
-    x:r.x, y:r.y, width:r.w, height:r.h,
+  state.rects.forEach((r,i) => shape(r, {
     fill: state.focusRect === i ? "var(--slab-lit)" : "var(--slab)"
   }, slab));
 
@@ -2086,10 +2362,9 @@ function drawPlan(L, opts){
   if(lastCarpet && !lastCarpet.overflow) drawDrops(lastCarpet, el, px);
 
   // Wall outline.
-  state.rects.forEach(r => el("rect", {
-    x:r.x, y:r.y, width:r.w, height:r.h, fill:"none",
-    stroke:"var(--ink)", "stroke-width":2, "vector-effect":"non-scaling-stroke",
-    "stroke-linejoin":"miter", opacity:.85
+  state.rects.forEach(r => shape(r, {
+    fill:"none", stroke:"var(--ink)", "stroke-width":2,
+    "vector-effect":"non-scaling-stroke", "stroke-linejoin":"miter", opacity:.85
   }));
 
   drawNosings(el, px);
@@ -2313,6 +2588,36 @@ function drawEditLayer(el, px, fs, bb){
     }, g);
   }
 
+  // A handle per corner for slicing it off. The one on a corner that is
+  // already cut sits on the middle of the slice, so it can be dragged back
+  // to the corner to undo it; the rest sit just inside their corner.
+  cutHits = [];
+  const cur = cutOf(sel);
+  const inset = px(COARSE ? 22 : 16);
+  for(const corner of CORNERS){
+    const east  = corner === "ne" || corner === "se";
+    const south = corner === "se" || corner === "sw";
+    const cx = east ? sel.x + sel.w : sel.x;
+    const cy = south ? sel.y + sel.h : sel.y;
+    let hx, hy;
+    if(cur && cur.corner === corner){
+      hx = cx + (east ? -cur.dx/2 : cur.dx/2);
+      hy = cy + (south ? -cur.dy/2 : cur.dy/2);
+    } else {
+      const d = Math.min(inset, sel.w/3, sel.h/3);
+      hx = cx + (east ? -d : d);
+      hy = cy + (south ? -d : d);
+    }
+    const k = px(COARSE ? 6 : 4.5);
+    el("polygon", {
+      points: `${hx},${hy-k} ${hx+k},${hy} ${hx},${hy+k} ${hx-k},${hy}`,
+      fill: (cur && cur.corner === corner) ? "var(--nose)" : "var(--surface-2, #2A3830)",
+      stroke:"var(--nose)", "stroke-width":1.4, "vector-effect":"non-scaling-stroke",
+      opacity: (cur && cur.corner === corner) ? 1 : .75
+    }, g);
+    cutHits.push({corner, x:hx, y:hy});
+  }
+
   // The two dimensions, as chips you can click and type into. Their boxes
   // are kept for hit testing, since the overlay itself takes no events.
   const chip = (label, key, ax, ay, alignX, alignY) => {
@@ -2374,12 +2679,18 @@ function hitTest(p){
   const sel = state.rects[state.focusRect];
   if(sel){
     for(const c of chipHits) if(inBox(c, p)) return {kind:"chip", i:c.i, k:c.k};
+    for(const c of cutHits){
+      if(Math.abs(p.x - c.x) <= tol && Math.abs(p.y - c.y) <= tol){
+        return {kind:"cut", i:state.focusRect, corner:c.corner};
+      }
+    }
     const h = handleUnder(sel, p, tol);
     if(h) return {kind:"resize", i:state.focusRect, hx:h.hx, hy:h.hy};
-    if(inBox(sel, p)) return {kind:"move", i:state.focusRect};
+    if(inShape(sel, p)) return {kind:"move", i:state.focusRect};
   }
+  // A sliced-off corner is not floor, so it is not a place to grab the area by.
   for(let i=state.rects.length-1;i>=0;i--)
-    if(inBox(state.rects[i], p)) return {kind:"move", i};
+    if(inShape(state.rects[i], p)) return {kind:"move", i};
   return {kind:"pan"};
 }
 
@@ -2433,6 +2744,7 @@ function toggleNose(p){
 function cursorFor(hit){
   if(tool === "nose") return "pointer";
   if(tool === "draw") return "crosshair";
+  if(hit.kind === "cut") return "crosshair";
   if(hit.kind === "chip") return "text";
   if(hit.kind === "move") return "move";
   if(hit.kind === "resize"){
@@ -2591,7 +2903,10 @@ function closeDimEdit(commit){
     const hit = panning ? {kind:"pan"} : hitTest(p);
     if(hit.kind === "chip"){ openDimEdit(hit.i, hit.k); return; }
 
-    if(hit.kind === "resize"){
+    if(hit.kind === "cut"){
+      remember();
+      drag = {mode:"cut", i:hit.i, corner:hit.corner, start:{...state.rects[hit.i]}};
+    } else if(hit.kind === "resize"){
       remember();
       drag = {mode:"resize", i:hit.i, hx:hit.hx, hy:hit.hy, start:{...state.rects[hit.i]}};
     } else if(hit.kind === "move"){
@@ -2656,6 +2971,23 @@ function closeDimEdit(commit){
                              mat:matOf(drag.start)};
       drag.guide = {gx, gy};
 
+    } else if(drag.mode === "cut"){
+      const r = drag.start;
+      const east  = drag.corner === "ne" || drag.corner === "se";
+      const south = drag.corner === "se" || drag.corner === "sw";
+      const cx = east ? r.x + r.w : r.x;
+      const cy = south ? r.y + r.h : r.y;
+      // The handle sits on the middle of the slice and follows the finger, so
+      // the slice itself grows at twice the distance dragged.
+      const round = v => Math.max(0, Math.round(v/GRID)*GRID);
+      const dx = Math.min(round(2*(east ? cx - p.x : p.x - cx)), r.w);
+      const dy = Math.min(round(2*(south ? cy - p.y : p.y - cy)), r.h);
+      const next = {x:r.x, y:r.y, w:r.w, h:r.h, mat:matOf(r)};
+      // Dragged back into its corner, the slice is gone rather than tiny.
+      if(dx >= GRID && dy >= GRID) next.cut = {corner:drag.corner, dx, dy};
+      state.rects[drag.i] = next;
+      drag.guide = null;
+
     } else if(drag.mode === "draw"){
       const sx = snapOne(p.x, cands.xs, tol, GRID);
       const sy = snapOne(p.y, cands.ys, tol, GRID);
@@ -2694,7 +3026,7 @@ function closeDimEdit(commit){
       } else {
         toast("Drag out a rectangle to add an area.", true);
       }
-    } else if(d.mode === "move" || d.mode === "resize"){
+    } else if(d.mode === "move" || d.mode === "resize" || d.mode === "cut"){
       drawAreas();
     }
     refresh();

@@ -50,6 +50,7 @@ The plan is a proper drawing surface, not a picture of the answer.
 | Set a size exactly | Click the figure on the selected area and type it | Tap it |
 | Draw a new area | **Draw** or `D`, then drag one out | **Draw**, then drag |
 | Mark a stair nosing | **Nose** or `N`, then click an edge | **Nose**, then tap |
+| Slice a corner off | Drag the diamond just inside that corner | Same |
 | Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z`, or the toolbar | The toolbar |
 | Change level | The picker on the plan toolbar | Same |
 | Nudge | Arrow keys, 10 mm, or 100 mm with shift | — |
@@ -93,6 +94,8 @@ how many metres you need and which two materials it transitions between.
 - **Laminate or carpet** per area, with carpet worked out as drops off a roll
 - **Stairs**, carpeted as one run or clad in plank widths
 - **Stair nosings** on any edge, naming the transition they make
+- **Angled corners** on any area, for a chamfer, a bay or a triangular room
+- **Winders and landings**, so an L or U flight can be described
 - **Straight rows** or **herringbone**, the latter at 45°, 135°, 0° or 90°
 - Plank direction and starting corner (all eight combinations)
 - A set-out point, so the pattern can start anywhere rather than hard against a

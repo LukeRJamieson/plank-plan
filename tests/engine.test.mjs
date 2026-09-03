@@ -24,12 +24,16 @@ const source = html.slice(html.indexOf("*/", start) + 2, end);
 const {
   EPS, PRESETS, unionIntervals, unionArea, bboxOf, makeTransform, computeLayout,
   snapCandidates, snapOne, snapMoved, normRect,
-  MIN_END, MIN_JOIN, rowEnds, endScore, joinGap, bestStagger
+  MIN_END, MIN_JOIN, rowEnds, endScore, joinGap, bestStagger,
+  cutOf, cutTriangle, shapePoly, shapeArea, inShape, clipToPoly, floorCells,
+  unionAreaIn, spanAt, spanAcross
 } = new Function(
   source +
   "\nreturn { EPS, PRESETS, unionIntervals, unionArea, bboxOf, makeTransform, computeLayout," +
   "\n         snapCandidates, snapOne, snapMoved, normRect," +
-  "\n         MIN_END, MIN_JOIN, rowEnds, endScore, joinGap, bestStagger };"
+  "\n         MIN_END, MIN_JOIN, rowEnds, endScore, joinGap, bestStagger," +
+  "\n         cutOf, cutTriangle, shapePoly, shapeArea, inShape, clipToPoly, floorCells," +
+  "\n         unionAreaIn, spanAt, spanAcross };"
 )();
 
 /** Standard settings; individual tests override what they care about. */
@@ -520,6 +524,160 @@ test("a bigger allowance never costs less", () => {
   const cheap = computeLayout(cfg({ priceBasis: "pack", price: 60, extra: 5 }));
   const safe = computeLayout(cfg({ priceBasis: "pack", price: 60, extra: 20 }));
   assert.ok(safe.cost >= cheap.cost);
+});
+
+/* ---------------------------------------------------------------- */
+/* Areas with an angled corner                                      */
+/* ---------------------------------------------------------------- */
+
+const cutRect = (corner, dx, dy, over = {}) =>
+  ({ x: 0, y: 0, w: 4000, h: 3000, mat: "laminate", cut: { corner, dx, dy }, ...over });
+
+test("a cut takes a triangle off, and only a triangle", () => {
+  for (const corner of ["nw", "ne", "se", "sw"]) {
+    const r = cutRect(corner, 1000, 600);
+    assert.equal(shapeArea(r), 4000 * 3000 - 1000 * 600 / 2, corner);
+    assert.equal(unionArea([r]), shapeArea(r), corner);
+    assert.equal(shapePoly(r).length, 5, corner);
+  }
+});
+
+test("a cut of nothing is not a cut", () => {
+  assert.equal(cutOf({ x: 0, y: 0, w: 100, h: 100 }), null);
+  assert.equal(cutOf({ x: 0, y: 0, w: 100, h: 100, cut: { corner: "ne", dx: 0, dy: 50 } }), null);
+  assert.equal(cutOf({ x: 0, y: 0, w: 100, h: 100, cut: { corner: "up", dx: 5, dy: 5 } }), null);
+  assert.equal(shapePoly({ x: 0, y: 0, w: 100, h: 100 }).length, 4);
+});
+
+test("a cut cannot eat more than the area it belongs to", () => {
+  const c = cutOf({ x: 0, y: 0, w: 100, h: 80, cut: { corner: "ne", dx: 9999, dy: 9999 } });
+  assert.equal(c.dx, 100);
+  assert.equal(c.dy, 80);
+});
+
+test("the corner that was cut is off the floor and the others are on it", () => {
+  const r = cutRect("ne", 1000, 600);
+  assert.equal(inShape(r, { x: 3990, y: 10 }), false);   // inside the slice
+  assert.equal(inShape(r, { x: 10, y: 10 }), true);      // the far corner
+  assert.equal(inShape(r, { x: 3990, y: 2990 }), true);
+  assert.equal(inShape(r, { x: 2000, y: 1500 }), true);
+});
+
+test("stacked areas are measured once each, not merged into one", () => {
+  // Two rooms one above the other. An earlier decomposition merged their
+  // y-intervals into a cell neither of them contained, which left no owner to
+  // ask about the cut and lost the whole cell.
+  const stacked = [
+    { x: 0, y: 0, w: 3000, h: 2000 },
+    { x: 0, y: 2000, w: 3000, h: 1500 }
+  ];
+  assert.equal(unionArea(stacked), 3000 * 3500);
+  assert.equal(unionArea(PRESETS.l), 5000 * 3200 + 2600 * 1500);
+});
+
+test("overlapping areas still count once, with the cuts taken off", () => {
+  // The right-hand area is cut where the two do not overlap, so the cut counts.
+  const a = { x: 0, y: 0, w: 2000, h: 2000 };
+  const b = { x: 1000, y: 0, w: 2000, h: 2000, cut: { corner: "ne", dx: 500, dy: 400 } };
+  assert.equal(unionArea([a, b]), 3000 * 2000 - 500 * 400 / 2);
+});
+
+test("a corner cut away by one area but covered by another is still floor", () => {
+  const a = { x: 0, y: 0, w: 2000, h: 2000, cut: { corner: "ne", dx: 500, dy: 500 } };
+  const b = { x: 1000, y: 0, w: 1000, h: 1000 };        // fills the slice
+  assert.equal(unionArea([a, b]), 2000 * 2000);
+});
+
+test("the covered span shortens down the slope of a cut", () => {
+  const r = cutRect("ne", 1000, 600);                   // slice across the top right
+  const top = spanAt(r, 0, 100);
+  const low = spanAt(r, 1000, 1100);
+  assert.ok(top[1] < low[1], `top reached ${top[1]}, lower down ${low[1]}`);
+  assert.equal(low[1], 4000);                           // below the cut, full width
+  assert.ok(Math.abs(top[1] - (3000 + 1000 * 100 / 600)) < 1e-9);
+  assert.equal(spanAt(r, 5000, 5100), null);            // below the area entirely
+});
+
+test("planks still cover a room with an angled corner", () => {
+  for (const corner of ["nw", "ne", "se", "sw"]) {
+    const L = computeLayout(cfg({ rects: [cutRect(corner, 1200, 900)] }));
+    const covered = L.pieces.reduce((s, p) => s + p.w * p.h, 0) / 1e6;
+    assert.ok(covered >= L.floorArea - 1e-9, `${corner}: floor left bare`);
+    for (const p of L.pieces) assert.ok(p.w <= base.plankL + EPS, `${corner}: over-long piece`);
+    assert.ok(L.floorArea < 12, `${corner}: the cut was not taken off`);
+  }
+});
+
+test("an angled corner is a row that needs ripping", () => {
+  // A square room only rips where the last row is narrower than a plank; a
+  // sloping wall rips every row it passes through.
+  const square = computeLayout(cfg({ rects: [{ x: 0, y: 0, w: 4000, h: 3000 }] }));
+  const angled = computeLayout(cfg({ rects: [cutRect("ne", 1200, 900)] }));
+  assert.ok(angled.ripRows > square.ripRows,
+    `angled ${angled.ripRows} should beat square ${square.ripRows}`);
+  assert.ok(angled.ripRows >= 4, `only ${angled.ripRows} rows meet a 900 mm slope`);
+});
+
+test("a cut travels with its area into plank space and back", () => {
+  const rects = [cutRect("ne", 1200, 900), { x: 0, y: 3000, w: 2000, h: 1000 }];
+  for (const dir of ["h", "v"]) {
+    for (const corner of ["tl", "tr", "bl", "br"]) {
+      const T = makeTransform(rects, dir, corner);
+      const back = T.toReal(T.toPlank(rects[0]));
+      for (const k of ["x", "y", "w", "h"]) {
+        assert.ok(Math.abs(back[k] - rects[0][k]) < EPS, `${dir}/${corner} lost ${k}`);
+      }
+      assert.equal(cutOf(back).corner, "ne", `${dir}/${corner} moved the cut`);
+      assert.equal(cutOf(back).dx, 1200);
+      assert.equal(cutOf(back).dy, 900);
+    }
+  }
+});
+
+test("a cut room lays to the same area whichever way the planks run", () => {
+  const rects = [cutRect("sw", 1500, 1100)];
+  const across = computeLayout(cfg({ rects, dir: "h" }));
+  const down = computeLayout(cfg({ rects, dir: "v" }));
+  assert.ok(Math.abs(across.floorArea - down.floorArea) < 1e-9);
+  for (const L of [across, down]) {
+    const covered = L.pieces.reduce((s, p) => s + p.w * p.h, 0) / 1e6;
+    assert.ok(covered >= L.floorArea - 1e-9);
+  }
+});
+
+test("the herringbone lattice still tiles a cut floor exactly", () => {
+  for (const corner of ["nw", "ne", "se", "sw"]) {
+    for (const deg of [0, 45, 90, 135]) {
+      const L = computeLayout({
+        ...base, pattern: "herringbone", hbAngle: deg, plankL: 600, plankW: 120,
+        rects: [cutRect(corner, 1300, 800)]
+      });
+      const covered = L.pieces.reduce((s, p) => s + p.area, 0) + L.sliverArea;
+      assert.ok(Math.abs(covered / 1e6 - L.floorArea) < 1e-9,
+        `${corner} @ ${deg}: ${covered / 1e6} laid over ${L.floorArea}`);
+    }
+  }
+});
+
+test("carpet drops shorten against a sloping wall too", () => {
+  const plain = computeCarpet(bld({ rects: [{ x: 0, y: 0, w: 5000, h: 3000 }] }));
+  const angled = computeCarpet(bld({ rects: [cutRect("se", 2000, 1500, { w: 5000 })] }));
+  assert.ok(angled.rollLength < plain.rollLength,
+    `${angled.rollLength} should be under ${plain.rollLength}`);
+  assert.ok(angled.boughtArea >= angled.floorArea - 1e-9);
+});
+
+test("an angled corner saves and reloads", () => {
+  const plan = { ...defaultPlan() };
+  plan.levels = [{ name: "G", rects: [cutRect("sw", 900, 700)] }];
+  const { plan: back, warnings } = sanitisePlan(serialisePlan(plan));
+  assert.deepEqual(warnings, []);
+  assert.deepEqual(back.levels[0].rects[0].cut, { corner: "sw", dx: 900, dy: 700 });
+  // And nonsense in the cut is dropped rather than carried.
+  const junk = sanitisePlan({ levels: [{ name: "G", rects: [
+    { x: 0, y: 0, w: 100, h: 100, cut: { corner: "sideways", dx: 5, dy: 5 } }
+  ]}]}).plan;
+  assert.equal(junk.levels[0].rects[0].cut, undefined);
 });
 
 /* ---------------------------------------------------------------- */

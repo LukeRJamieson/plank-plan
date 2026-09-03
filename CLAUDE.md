@@ -62,6 +62,41 @@ Nosing edges are indices, so anything that removes or reorders an area or a
 level has to fix them up: `dropNoseFor`, `shiftNoseLevels`, and a filter in
 `sanitisePlan` that drops any edge naming an area that is no longer there.
 
+## Areas with an angled corner
+
+An area is a rectangle with, at most, **one** corner sliced off by a straight
+line — `cut: {corner, dx, dy}`. That covers a chamfered corner, an angled bay
+and a triangular room, and unions of them cover the rest, which is the same
+trick the app already plays with L-shapes. Two corners off one room is two
+areas.
+
+One cut, deliberately: it keeps the removed region a single triangle, and that
+is what lets the floor be decomposed **exactly** rather than approximately.
+
+`floorCells()` is the piece everything else hangs off. It slices a full grid on
+every rect edge and, for each cell, asks which areas reach it. A point is floor
+unless *every* owner has sliced it away, so the cell's `hole` is the
+intersection of the owners' triangles — and an intersection of convex shapes is
+convex, which is what keeps `clipToPoly` able to compute it. Both `unionArea`
+and the herringbone clipper read `floorCells`, so the two can never disagree
+about how much floor there is.
+
+Do **not** build cells from `disjointRects`: it merges the y-intervals of
+*different* areas, so two rooms stacked one above the other come back as a
+single cell that neither contains, leaving no owner to ask about the cut. That
+bug lost a whole cell's floor and only a weak assertion caught it.
+
+`spanAt` / `spanAcross` give the *envelope* of an area within a band, not its
+guaranteed depth: where a cut slopes through a row the planks still run out to
+the furthest point, and the rip check is what notices the band is not full
+depth. Both clip the area's polygon rather than working four corners out by
+hand.
+
+A cut travels with its area through the plank transform and the carpet swap.
+`swapAxes` is shared by both for exactly that reason — an earlier draft had
+`computeCarpet` swapping with its own helper, which silently dropped the cut
+and made a sloping wall cost full-length drops.
+
 ## Undo
 
 `remember()` is called **before** a change and records the state the edit
@@ -425,6 +460,8 @@ The tests encode these; break one and something is wrong.
 | Pile | The direction carpet fibres lie. It has to match across every drop, which is why a drop cannot be turned round. |
 | Tread / riser | The flat of a step and its vertical face. Both need covering. |
 | Nosing | The trim finishing the front edge of a step, and where two materials meet. |
+| Winder | A turning tread that takes a corner instead of a landing. Counted as a square of the stair width. |
+| Going | The horizontal depth of a tread. |
 
 ## Deliberate simplifications
 
@@ -435,8 +472,10 @@ Don't "fix" these without asking — they are choices, not oversights.
   buying material.
 - **Saw kerf is ignored.** It is under 3 mm and is swallowed by the extra
   allowance.
-- **Only rectilinear rooms.** No diagonal layouts, herringbone, curved walls or
-  angled bays.
+- **One angled corner per area.** Enough for a chamfer, a bay or a triangular
+  room; two corners off one room is two areas. It is what keeps the removed
+  region a single triangle and the floor decomposition exact.
+- **No curves.** A bay is approximated by angled corners, not by an arc.
 - **A single stagger value.** Real installers sometimes randomise the offset;
   a fixed stagger is what manufacturers specify.
 - **The stagger search only moves the stagger.** The set-out point along the
@@ -535,6 +574,8 @@ quick syntax sanity check if you want one.
 - Stairs drawn on the plan, so a winder or a half-landing could be described.
 - A print stylesheet, so the cut list can go in a pocket.
 - Rotating an area, which the whole engine currently assumes cannot happen.
+- More than one cut per area, which needs the removed region to stop being a
+  single triangle and the cell decomposition to follow it.
 - Deduct the expansion gap properly, which needs a real polygon inset rather
   than a per-rectangle one.
 - Plans in the URL hash, so one can be shared by link rather than by file.
