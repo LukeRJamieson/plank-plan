@@ -32,6 +32,10 @@
   --slab-lit: #3D5045;   /* the area being edited */
   --grain:    rgba(90,60,25,.20);
   --guide:    #6FD3C0;   /* snap guide, deliberately not the amber */
+  --carpet:     #9A9384; /* carpet: a textile greige against the timber */
+  --carpet-2:   #857E70; /* the alternate drop, so seams are visible */
+  --carpet-edge:#6B655A;
+  --nose:       #B9C4CC; /* stair nosing: a cool metal strip among warm floors */
   --pressed:  #3A4A41;   /* a picker or tool that is currently chosen */
   --r-sm: 3px;
   --r-md: 6px;
@@ -184,7 +188,7 @@ input[type=checkbox]{accent-color:var(--amber);width:1rem;height:1rem;margin:0}
 /* ---------- area (rectangle) editor ---------- */
 .areas{display:flex;flex-direction:column;gap:.45rem}
 .area-row{
-  display:grid;grid-template-columns:20px repeat(4,1fr) 24px;
+  display:grid;grid-template-columns:20px repeat(4,1fr) 22px 24px;
   gap:.3rem;align-items:center;
 }
 .area-row .tag{
@@ -195,7 +199,7 @@ input[type=checkbox]{accent-color:var(--amber);width:1rem;height:1rem;margin:0}
 .area-row.sel input{border-color:var(--amber)}
 .area-row input{padding:.34rem .3rem;font-size:.82rem;text-align:center}
 .area-head{
-  display:grid;grid-template-columns:20px repeat(4,1fr) 24px;gap:.3rem;
+  display:grid;grid-template-columns:20px repeat(4,1fr) 22px 24px;gap:.3rem;
   font-size:.7rem;color:var(--ink-dim);text-align:center;margin-bottom:.15rem;
 }
 .x-btn{
@@ -273,6 +277,34 @@ input[type=checkbox]{accent-color:var(--amber);width:1rem;height:1rem;margin:0}
   min-width:3.2rem;text-align:right;
 }
 
+/* ---------- levels ---------- */
+.level-pick{
+  width:auto;min-width:8.5rem;padding:.3rem .45rem;font-size:.8rem;
+  font-family:"IBM Plex Sans",sans-serif;
+}
+.levels{display:flex;flex-direction:column;gap:.4rem}
+.level-row{display:grid;grid-template-columns:1.6rem 1fr auto 24px;gap:.35rem;align-items:center}
+.level-row .tag{
+  font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--ink-dim);
+  text-align:center;cursor:pointer;
+}
+.level-row.sel .tag{color:var(--amber)}
+.level-row.sel input{border-color:var(--amber)}
+.level-row input{font-family:"IBM Plex Sans",sans-serif;font-size:.85rem;text-align:left}
+.level-row .count{font-size:.72rem;color:var(--ink-dim);font-family:"IBM Plex Mono",monospace}
+
+/* The material a drawn area is finished in. Two states, so a toggle rather
+   than a picker — the swatch says which without reading the letter. */
+.mat-btn{
+  border:1px solid var(--edge);border-radius:var(--r-sm);cursor:pointer;
+  background:var(--panel-2);padding:0;height:1.55rem;
+  display:flex;align-items:center;justify-content:center;
+}
+.mat-btn i{display:block;width:.72rem;height:.72rem;border-radius:2px;border:1px solid var(--oak-edge)}
+.mat-btn[data-mat=laminate] i{background:var(--oak)}
+.mat-btn[data-mat=carpet] i{background:var(--carpet);border-color:var(--carpet-edge)}
+.mat-btn:hover{border-color:var(--amber)}
+
 /* Live readout while dragging, and the standing hint when nothing is
    happening. It sits under the drawing rather than floating over it: the
    plan is nearly full height now, so anything floating covers floor. */
@@ -344,13 +376,15 @@ td.row-no{color:var(--ink-dim);width:3rem}
    room dimension one click at a time, and on a touch screen they are far
    too small to hit anyway. */
 @media (min-width:760px) and (max-width:1059px){
-  .area-row,.area-head{grid-template-columns:16px repeat(4,1fr) 20px;gap:.22rem}
+  .area-row,.area-head{grid-template-columns:16px repeat(4,1fr) 20px 20px;gap:.22rem}
   .area-row input{padding:.34rem .12rem;font-size:.78rem}
 }
-@media (min-width:760px) and (max-width:1059px), (pointer:coarse){
-  .area-row input::-webkit-inner-spin-button,
-  .area-row input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
-}
+/* The area rows carry six columns now, and at any panel width that leaves
+   too little for Chrome's spin buttons — they were quietly clipping the last
+   digit of every dimension. Nobody steps a room size one click at a time. */
+.area-row input::-webkit-inner-spin-button,
+.area-row input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.area-row input{-moz-appearance:textfield;appearance:textfield}
 
 /* ---------- touch ----------
    A finger is about 9 mm across and has no hover to aim with, so on a
@@ -408,6 +442,17 @@ td.row-no{color:var(--ink-dim);width:3rem}
   <aside class="rail">
 
     <section class="sec">
+      <h2>Levels <small>one floor at a time</small></h2>
+      <div class="levels" id="levels"></div>
+      <div class="presets">
+        <button class="btn btn-amber" id="add-level">Add level above</button>
+      </div>
+      <p class="hint">Each level is laid on its own and the materials are added
+        up across the building. The level below shows as a ghost so you can line
+        a storey up with the one under it.</p>
+    </section>
+
+    <section class="sec">
       <h2>Room shape <small id="unit-note">mm</small></h2>
       <div class="field">
         <label for="units">Enter room dimensions in</label>
@@ -416,7 +461,7 @@ td.row-no{color:var(--ink-dim);width:3rem}
           <option value="m">Metres</option>
         </select>
       </div>
-      <div class="area-head"><span></span><span>X</span><span>Y</span><span>Width</span><span>Depth</span><span></span></div>
+      <div class="area-head"><span></span><span>X</span><span>Y</span><span>Width</span><span>Depth</span><span></span><span></span></div>
       <div class="areas" id="areas"></div>
       <div class="presets">
         <button class="btn" data-preset="single">Single rectangle</button>
@@ -486,6 +531,47 @@ td.row-no{color:var(--ink-dim);width:3rem}
       </div>
     </section>
 
+    <section class="sec" id="carpet-sec">
+      <h2>Carpet <small>mm</small></h2>
+      <div class="pair">
+        <div class="field"><label for="rollW">Roll width</label>
+          <input type="number" id="rollW" value="4000" min="500" step="10"></div>
+        <div class="field"><label for="rollDir">Drops run</label>
+          <select id="rollDir">
+            <option value="v">Top to bottom</option>
+            <option value="h">Left to right</option>
+          </select></div>
+      </div>
+      <p class="hint">Carpet comes off the roll in lengths called drops, and the
+        pile has to run the same way in all of them — so a drop cannot be turned
+        round to save material. Turning the drops can change how many you need.</p>
+    </section>
+
+    <section class="sec">
+      <h2>Stairs <small>mm</small></h2>
+      <div class="field"><label for="stSteps">Number of steps</label>
+        <input type="number" id="stSteps" value="0" min="0" max="60" step="1"></div>
+      <div class="pair">
+        <div class="field"><label for="stWidth">Width</label>
+          <input type="number" id="stWidth" value="900" min="100" step="10"></div>
+        <div class="field"><label for="stMat">Covered in</label>
+          <select id="stMat">
+            <option value="carpet">Carpet</option>
+            <option value="laminate">Laminate</option>
+          </select></div>
+      </div>
+      <div class="pair">
+        <div class="field"><label for="stTread">Tread (going)</label>
+          <input type="number" id="stTread" value="280" min="100" step="5"></div>
+        <div class="field"><label for="stRiser">Riser</label>
+          <input type="number" id="stRiser" value="175" min="50" step="5"></div>
+      </div>
+      <label class="check"><input type="checkbox" id="stNosing" checked>
+        <span>A nosing on every step</span></label>
+      <p class="hint">Leave the steps at 0 if there are none. A flight is not part
+        of any floor's footprint, so it is described here rather than drawn.</p>
+    </section>
+
     <section class="sec">
       <h2>Price <small>optional</small></h2>
       <div class="pair">
@@ -499,13 +585,20 @@ td.row-no{color:var(--ink-dim);width:3rem}
         </div>
         <div class="field">
           <label for="price">Amount</label>
-          <div class="money"><span id="cur-sym">$</span>
+          <div class="money"><span class="cur-sym">$</span>
             <input type="number" id="price" value="0" min="0" step="0.01"></div>
         </div>
       </div>
-      <div class="field">
-        <label for="currency">Currency symbol</label>
-        <input type="text" id="currency" value="$" maxlength="4">
+      <div class="pair">
+        <div class="field">
+          <label for="carpetPrice">Carpet, per m²</label>
+          <div class="money"><span class="cur-sym">$</span>
+            <input type="number" id="carpetPrice" value="0" min="0" step="0.01"></div>
+        </div>
+        <div class="field">
+          <label for="currency">Currency symbol</label>
+          <input type="text" id="currency" value="$" maxlength="4">
+        </div>
       </div>
     </section>
 
@@ -526,6 +619,21 @@ td.row-no{color:var(--ink-dim);width:3rem}
   <main class="work">
     <div class="plan-wrap">
       <div class="plan-tools">
+        <div class="tool-group">
+          <select id="level-pick" class="level-pick" aria-label="Level being drawn"></select>
+        </div>
+        <div class="tool-group" role="group" aria-label="History">
+          <button class="tbtn wide" id="undo-btn" title="Undo — Ctrl+Z" disabled>
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none"
+                 stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+                 stroke-linejoin="round"><path d="M3 8h7a3.5 3.5 0 0 1 0 7H6M3 8l3-3M3 8l3 3"/></svg>
+          </button>
+          <button class="tbtn wide" id="redo-btn" title="Redo — Ctrl+Shift+Z" disabled>
+            <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none"
+                 stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+                 stroke-linejoin="round"><path d="M13 8H6a3.5 3.5 0 0 0 0 7h4M13 8l-3-3M13 8l-3 3"/></svg>
+          </button>
+        </div>
         <div class="tool-group" role="group" aria-label="Plan tool">
           <button class="tbtn" id="tool-select" aria-pressed="true"
                   title="Move and resize areas — V">
@@ -536,6 +644,11 @@ td.row-no{color:var(--ink-dim);width:3rem}
             <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"
                  fill="none" stroke="currentColor" stroke-width="1.6">
               <rect x="2.5" y="2.5" width="11" height="11" stroke-dasharray="3 2"/></svg>Draw</button>
+          <button class="tbtn" id="tool-nose" aria-pressed="false"
+                  title="Mark an edge as a stair nosing — N">
+            <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"
+                 fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M2 11h12M2 11V5"/><path d="M2 11l3-3h9" stroke-dasharray="2 2"/></svg>Nose</button>
         </div>
         <div class="tool-group gap" role="group" aria-label="Zoom">
           <button class="tbtn wide" id="zoom-out" title="Zoom out — minus key">−</button>
@@ -615,20 +728,53 @@ const PRESETS = {
    hostile until proved otherwise.
    ---------------------------------------------------------------- */
 const PLAN_FORMAT = "plank-plan";
-const PLAN_VERSION = 1;
-const MAX_AREAS = 40;
+const PLAN_VERSION = 2;          // 2 added levels, materials, stairs and nosing
+const MAX_AREAS = 40;            // per level
+const MAX_LEVELS = 12;
+const MAX_NOSE = 200;
+
+const MATERIALS = ["laminate", "carpet"];
+const SIDES = ["n", "e", "s", "w"];
+
+/** An area's material, defaulting for anything written before materials existed. */
+const matOf = r => (r && MATERIALS.includes(r.mat)) ? r.mat : "laminate";
 
 function defaultPlan(){
   return {
     name: "Untitled plan",
     units: "mm",
-    rects: PRESETS.l.map(r => ({...r})),
+    // A building is a stack of levels, laid one at a time and totalled at the
+    // end. A single-storey plan is one level, which is also what a plan saved
+    // before levels existed loads as.
+    levels: [{ name:"Ground floor", rects: PRESETS.l.map(r => ({...r, mat:"laminate"})) }],
     plankL: 1285, plankW: 192, perPack: 8,
     pattern: "straight", dir: "h", hbAngle: 45, corner: "tl",
     originX: 0, originY: 0,   // set-out point, measured in from that corner
     stagger: 300, reuse: true, minOff: 300, extra: 10,
-    priceBasis: "pack", price: 0, currency: "$"
+    // Carpet comes off a roll of fixed width, so the question is how many
+    // drops the room needs and where the seams between them fall.
+    rollW: 4000, rollDir: "v",
+    // A flight is not part of any floor's footprint, so it is described
+    // rather than drawn: it belongs to the building, not to a level.
+    stairs: { steps:0, width:900, tread:280, riser:175, mat:"carpet", nosing:true },
+    // Edges marked as a stair nosing, each {level, rect, side}.
+    noseEdges: [],
+    priceBasis: "pack", price: 0, carpetPrice: 0, currency: "$"
   };
+}
+
+/** The rectangles on one level, or an empty list if there is no such level. */
+function levelRects(st, i){
+  const lv = st.levels && st.levels[i];
+  return (lv && Array.isArray(lv.rects)) ? lv.rects : [];
+}
+
+/** Every rectangle in the building, with the level it sits on. */
+function allRects(st){
+  const out = [];
+  (st.levels || []).forEach((lv, i) =>
+    (lv.rects || []).forEach((r, j) => out.push({ level:i, index:j, rect:r })));
+  return out;
 }
 
 /** The saved-file wrapper: a format tag, a version, and the plan itself. */
@@ -636,7 +782,12 @@ function serialisePlan(st){
   const d = defaultPlan();
   const plan = {};
   for(const k of Object.keys(d)) plan[k] = st[k] !== undefined ? st[k] : d[k];
-  plan.rects = (st.rects || d.rects).map(r => ({x:r.x, y:r.y, w:r.w, h:r.h}));
+  plan.levels = (st.levels || d.levels).map(lv => ({
+    name: lv.name,
+    rects: (lv.rects || []).map(r => ({x:r.x, y:r.y, w:r.w, h:r.h, mat:matOf(r)}))
+  }));
+  plan.stairs = {...d.stairs, ...(st.stairs || {})};
+  plan.noseEdges = (st.noseEdges || []).map(n => ({level:n.level, rect:n.rect, side:n.side}));
   return { format: PLAN_FORMAT, version: PLAN_VERSION, saved: new Date().toISOString(), plan };
 }
 
@@ -674,7 +825,7 @@ function sanitisePlan(raw){
   const plan = {
     name:       text(body.name, 80, d.name),
     units:      pick(body.units, ["mm","m"], d.units),
-    rects:      [],
+    levels:     [],
     plankL:     num(body.plankL, 100, 5000, d.plankL),
     plankW:     num(body.plankW, 20, 2000, d.plankW),
     perPack:    Math.round(num(body.perPack, 1, 500, d.perPack)),
@@ -688,33 +839,84 @@ function sanitisePlan(raw){
     reuse:      typeof body.reuse === "boolean" ? body.reuse : d.reuse,
     minOff:     num(body.minOff, 0, 5000, d.minOff),
     extra:      num(body.extra, 0, 100, d.extra),
+    rollW:      num(body.rollW, 500, 6000, d.rollW),
+    rollDir:    pick(body.rollDir, ["h","v"], d.rollDir),
+    stairs:     null,
+    noseEdges:  [],
     priceBasis: pick(body.priceBasis, ["pack","plank","m2"], d.priceBasis),
     price:      num(body.price, 0, 1e7, d.price),
+    carpetPrice:num(body.carpetPrice, 0, 1e7, d.carpetPrice),
     currency:   text(body.currency, 4, d.currency)
   };
 
-  if(Array.isArray(body.rects)){
-    let dropped = 0;
-    for(const r of body.rects.slice(0, MAX_AREAS)){
-      const x = Number(r && r.x), y = Number(r && r.y);
-      const w = Number(r && r.w), h = Number(r && r.h);
-      const sane = [x,y,w,h].every(Number.isFinite) && w > 0 && h > 0 &&
-                   Math.abs(x) <= 1e6 && Math.abs(y) <= 1e6 && w <= 1e6 && h <= 1e6;
-      if(sane) plan.rects.push({x,y,w,h}); else dropped++;
+  /* ---- areas, one list per level ----
+     A plan saved before levels existed has a bare `rects` array. It is a
+     ground floor and nothing else, so it loads as one, silently. */
+  const rawLevels = Array.isArray(body.levels) ? body.levels
+                  : Array.isArray(body.rects) ? [{ name:d.levels[0].name, rects:body.rects }]
+                  : null;
+  let dropped = 0, cappedAreas = false;
+  if(rawLevels){
+    for(const lv of rawLevels.slice(0, MAX_LEVELS)){
+      const rects = [];
+      const src = (lv && Array.isArray(lv.rects)) ? lv.rects : [];
+      if(src.length > MAX_AREAS) cappedAreas = true;
+      for(const r of src.slice(0, MAX_AREAS)){
+        const x = Number(r && r.x), y = Number(r && r.y);
+        const w = Number(r && r.w), h = Number(r && r.h);
+        const sane = [x,y,w,h].every(Number.isFinite) && w > 0 && h > 0 &&
+                     Math.abs(x) <= 1e6 && Math.abs(y) <= 1e6 && w <= 1e6 && h <= 1e6;
+        if(sane) rects.push({x, y, w, h, mat: matOf(r)}); else dropped++;
+      }
+      plan.levels.push({
+        name: text(lv && lv.name, 40, `Level ${plan.levels.length + 1}`),
+        rects
+      });
     }
-    if(dropped) warnings.push(`${dropped} area${dropped===1?" was":"s were"} unreadable and skipped.`);
-    if(body.rects.length > MAX_AREAS){
-      warnings.push(`Only the first ${MAX_AREAS} areas were loaded.`);
+    if(rawLevels.length > MAX_LEVELS){
+      warnings.push(`Only the first ${MAX_LEVELS} levels were loaded.`);
     }
   }
-  if(!plan.rects.length){
-    plan.rects = d.rects;
-    // An absent rects field is just a missing setting, like any other. Only
-    // say the room was reset when areas were offered and none of them worked.
-    if(Array.isArray(body.rects)){
-      warnings.push("There were no usable areas in that plan, so the room was reset.");
+  if(dropped) warnings.push(`${dropped} area${dropped===1?" was":"s were"} unreadable and skipped.`);
+  if(cappedAreas) warnings.push(`Only the first ${MAX_AREAS} areas on a level were loaded.`);
+
+  // An empty level is fine — you might be about to draw on it. A plan with no
+  // usable area anywhere is not, and gets the default room back.
+  if(!plan.levels.length || !plan.levels.some(lv => lv.rects.length)){
+    const offered = rawLevels && rawLevels.some(lv => Array.isArray(lv && lv.rects) && lv.rects.length);
+    plan.levels = d.levels;
+    if(offered) warnings.push("There were no usable areas in that plan, so the room was reset.");
+  }
+
+  /* ---- stairs ---- */
+  const s = (body.stairs && typeof body.stairs === "object") ? body.stairs : {};
+  plan.stairs = {
+    steps:  Math.round(num(s.steps, 0, 60, d.stairs.steps)),
+    width:  num(s.width, 100, 5000, d.stairs.width),
+    tread:  num(s.tread, 100, 1000, d.stairs.tread),
+    riser:  num(s.riser, 50, 500, d.stairs.riser),
+    mat:    pick(s.mat, MATERIALS, d.stairs.mat),
+    nosing: typeof s.nosing === "boolean" ? s.nosing : d.stairs.nosing
+  };
+
+  /* ---- nosing edges ----
+     An edge that names an area which is no longer there is dropped rather
+     than carried as a dangling reference. */
+  if(Array.isArray(body.noseEdges)){
+    const seen = new Set();
+    for(const n of body.noseEdges.slice(0, MAX_NOSE)){
+      const level = Math.round(Number(n && n.level));
+      const rect = Math.round(Number(n && n.rect));
+      const side = n && n.side;
+      if(!Number.isFinite(level) || !Number.isFinite(rect) || !SIDES.includes(side)) continue;
+      if(!plan.levels[level] || !plan.levels[level].rects[rect]) continue;
+      const key = level + ":" + rect + ":" + side;
+      if(seen.has(key)) continue;
+      seen.add(key);
+      plan.noseEdges.push({level, rect, side});
     }
   }
+
   return { plan, warnings, ok:true };
 }
 
@@ -1061,7 +1263,10 @@ function computeHerringbone(st){
 
 /* ---------- the layout engine ----------------------------------- */
 function computeLayout(st){
-  if(!st.rects.length || st.plankL <= 0 || st.plankW <= 0) return null;
+  // A plan carries levels rather than a bare list of areas, so a caller
+  // handing the whole plan straight in gets nothing to lay rather than a
+  // crash. sanitisePlan promises anything it returns is acceptable here.
+  if(!st.rects || !st.rects.length || st.plankL <= 0 || st.plankW <= 0) return null;
   return st.pattern === "herringbone" ? computeHerringbone(st) : computeStraight(st);
 }
 
@@ -1282,6 +1487,273 @@ function bestStagger(st){
   };
 }
 
+/* ---------- carpet ----------------------------------------------
+   Carpet is not cut like planks. It comes off a roll of fixed width in
+   lengths called drops; the pile has to run the same way in every drop,
+   so a drop cannot be turned round, and an offcut from one room is
+   rarely any use in the next. The whole question is therefore how many
+   drops a floor needs, how long each has to be, and how many seams that
+   leaves you joining.
+
+   The sweep is the same shape as the plank one — bands across the room,
+   then the intervals within each band that actually have floor under
+   them — which is what lets an L-shape and a room in two parts fall out
+   without special cases.
+   ---------------------------------------------------------------- */
+function computeCarpet(st){
+  const rects = st.rects || [];
+  const rollW = st.rollW;
+  if(!rects.length || !(rollW > 0)) return null;
+
+  // Carpet space: drops always run along +y, so the roll's width is measured
+  // along x. Swapping the axes is the only difference between the two
+  // directions, exactly as it is for planks.
+  const swap = st.rollDir === "h";
+  const sw = r => swap ? {x:r.y, y:r.x, w:r.h, h:r.w} : {x:r.x, y:r.y, w:r.w, h:r.h};
+  const cr = rects.map(sw);
+  const bb = bboxOf(cr);
+
+  const bandCount = Math.max(1, Math.ceil(bb.w/rollW - EPS));
+  if(!isFinite(bandCount) || bandCount > 400) return { overflow:true, bb };
+
+  const drops = [];
+  for(let k=0;k<bandCount;k++){
+    const x0 = bb.x + k*rollW;
+    const x1 = Math.min(bb.x + bb.w, x0 + rollW);
+    if(x1 - x0 <= EPS) continue;
+    const spans = unionIntervals(
+      cr.filter(r => r.x < x1 - EPS && r.x + r.w > x0 + EPS)
+        .map(r => [r.y, r.y + r.h])
+    );
+    for(const [a,b] of spans){
+      const d = {band:k, x:x0, y:a, w:x1 - x0, len:b - a};
+      // Back to room coordinates for drawing. sw is its own inverse.
+      d.rect = sw({x:d.x, y:d.y, w:d.w, h:d.len});
+      drops.push(d);
+    }
+  }
+
+  // You buy the full width of the roll whatever the drop needs, so the
+  // length taken off it is simply every drop laid end to end.
+  const rollLength = drops.reduce((s,d) => s + d.len, 0);
+  const floorArea = unionArea(rects)/1e6;
+  const boughtArea = rollLength * rollW / 1e6;
+
+  return {
+    mode: "carpet", drops, rollW, rollLength,
+    // Every drop after the first has to be joined to what is already down.
+    seams: Math.max(0, drops.length - 1),
+    floorArea, boughtArea,
+    wastePct: boughtArea > 0 ? (1 - floorArea/boughtArea)*100 : 0,
+    bb
+  };
+}
+
+/* ---------- stairs -----------------------------------------------
+   A flight is not part of any floor's footprint — it is the hole
+   between two of them — so it is described rather than drawn, and it
+   belongs to the building rather than to a level.
+
+   Each step needs its tread and its riser covered. Carpet runs up the
+   whole flight as one length, which is why a flight is one drop rather
+   than one drop per step. Laminate is cut to clad each face, so each
+   tread and riser becomes as many plank widths as it takes.
+   ---------------------------------------------------------------- */
+function computeStairs(st){
+  const s = st.stairs || {};
+  const steps = Math.max(0, Math.round(s.steps || 0));
+  if(!steps || !(s.width > 0)) return null;
+
+  const mat = MATERIALS.includes(s.mat) ? s.mat : "carpet";
+  const perStep = (s.tread || 0) + (s.riser || 0);   // material run per step
+  const run = steps * perStep;                       // up the whole flight
+  const area = steps * s.width * perStep / 1e6;
+  const nosing = s.nosing ? steps * s.width / 1000 : 0;   // metres
+
+  const out = { mat, steps, width:s.width, perStep, run, area, nosing };
+
+  if(mat === "carpet"){
+    // One length up the flight, as many drops side by side as the width needs.
+    const across = Math.max(1, Math.ceil((s.width - EPS)/Math.max(1, st.rollW)));
+    out.drops = across;
+    out.rollLength = across * run;
+    out.boughtArea = out.rollLength * st.rollW / 1e6;
+  } else {
+    // Each face is clad in plank widths running across the stair.
+    const pw = Math.max(1, st.plankW);
+    const perTread = Math.ceil(((s.tread || 0) - EPS)/pw);
+    const perRiser = Math.ceil(((s.riser || 0) - EPS)/pw);
+    out.piecesPerStep = perTread + perRiser;
+    out.pieceLen = s.width;
+    out.pieceCount = steps * out.piecesPerStep;
+  }
+  return out;
+}
+
+/* ---------- stair nosing ----------------------------------------
+   A nosing is the trim that finishes the edge of a step, and it is
+   also what makes the change of material at that edge look deliberate
+   rather than accidental. Marking an edge asks two questions: how long
+   is it, and what is on either side of it.
+   ---------------------------------------------------------------- */
+
+/** The four edges of a rectangle, as {side, x1,y1, x2,y2, len}. */
+function edgesOf(r){
+  return [
+    {side:"n", x1:r.x,       y1:r.y,       x2:r.x+r.w, y2:r.y,       len:r.w},
+    {side:"s", x1:r.x,       y1:r.y+r.h,   x2:r.x+r.w, y2:r.y+r.h,   len:r.w},
+    {side:"w", x1:r.x,       y1:r.y,       x2:r.x,     y2:r.y+r.h,   len:r.h},
+    {side:"e", x1:r.x+r.w,   y1:r.y,       x2:r.x+r.w, y2:r.y+r.h,   len:r.h}
+  ];
+}
+
+/** What lies immediately beyond an edge: the material there, or "open". */
+function beyondEdge(st, level, rectIndex, side){
+  const rects = levelRects(st, level);
+  const r = rects[rectIndex];
+  if(!r) return "open";
+  const step = 1;                       // just past the wall line, in mm
+  const p = side === "n" ? {x:r.x + r.w/2, y:r.y - step}
+          : side === "s" ? {x:r.x + r.w/2, y:r.y + r.h + step}
+          : side === "w" ? {x:r.x - step,  y:r.y + r.h/2}
+          :                {x:r.x + r.w + step, y:r.y + r.h/2};
+  // Later rectangles are drawn on top, so they win where areas overlap.
+  for(let i=rects.length-1;i>=0;i--){
+    if(i === rectIndex) continue;
+    const o = rects[i];
+    if(p.x >= o.x && p.x <= o.x + o.w && p.y >= o.y && p.y <= o.y + o.h) return matOf(o);
+  }
+  return "open";
+}
+
+/** Every marked edge, with its length in metres and what it transitions. */
+function noseRuns(st){
+  const out = [];
+  for(const n of (st.noseEdges || [])){
+    const r = levelRects(st, n.level)[n.rect];
+    if(!r) continue;
+    const e = edgesOf(r).find(x => x.side === n.side);
+    if(!e) continue;
+    out.push({
+      level:n.level, rect:n.rect, side:n.side,
+      metres: e.len/1000,
+      from: matOf(r),
+      to: beyondEdge(st, n.level, n.rect, n.side)
+    });
+  }
+  return out;
+}
+
+/* ---------- one level, then the whole building -------------------
+   Each level is laid on its own — a floor is a floor — and the totals
+   are added up at the end, because you buy material for the job rather
+   than for a storey. The plank engine is handed only the laminate
+   areas and the carpet sweep only the carpet ones, so neither has to
+   know the other exists.
+   ---------------------------------------------------------------- */
+function computeLevel(st, i){
+  const rects = levelRects(st, i);
+  const lam = rects.filter(r => matOf(r) === "laminate");
+  const car = rects.filter(r => matOf(r) === "carpet");
+  const lv = (st.levels || [])[i];
+  return {
+    index: i,
+    name: (lv && lv.name) || `Level ${i+1}`,
+    rects,
+    planks: lam.length ? computeLayout({...st, rects: lam}) : null,
+    carpet: car.length ? computeCarpet({...st, rects: car}) : null,
+    laminateArea: lam.length ? unionArea(lam)/1e6 : 0,
+    carpetArea:   car.length ? unionArea(car)/1e6 : 0
+  };
+}
+
+function computeBuilding(st){
+  const levels = [];
+  let planksUsed = 0, cutCount = 0, offcutSaves = 0, pieceCount = 0, ripRows = 0;
+  let lamArea = 0, carArea = 0, rollLength = 0, seams = 0, dropCount = 0;
+  let overflow = false;
+
+  for(let i=0;i<(st.levels || []).length;i++){
+    const L = computeLevel(st, i);
+    levels.push(L);
+    if(L.planks){
+      if(L.planks.overflow) overflow = true;
+      else {
+        planksUsed  += L.planks.planksUsed;
+        cutCount    += L.planks.cutCount;
+        offcutSaves += L.planks.offcutSaves;
+        pieceCount  += L.planks.pieces.length;
+        ripRows     += L.planks.ripRows;
+        lamArea     += L.planks.floorArea;
+      }
+    }
+    if(L.carpet){
+      if(L.carpet.overflow) overflow = true;
+      else {
+        rollLength += L.carpet.rollLength;
+        seams      += L.carpet.seams;
+        dropCount  += L.carpet.drops.length;
+        carArea    += L.carpet.floorArea;
+      }
+    }
+  }
+  if(overflow) return { overflow:true, levels };
+
+  /* Stairs are added to whichever material clads them. Their offcuts are
+     kept separate from the floor's: a flight is a different day's work and
+     the short lengths off it rarely find their way back into a room. */
+  const stairs = computeStairs(st);
+  let stairPlanks = 0;
+  if(stairs){
+    if(stairs.mat === "carpet"){
+      rollLength += stairs.rollLength;
+      carArea    += stairs.area;
+      dropCount  += stairs.drops;
+    } else {
+      const pieces = [];
+      for(let k=0;k<stairs.pieceCount;k++){
+        pieces.push({ size: Math.min(stairs.pieceLen, st.plankL),
+                      full: stairs.pieceLen >= st.plankL - EPS, source:"new" });
+      }
+      const acc = consume(pieces, st.plankL, st.minOff, st.reuse);
+      stairPlanks = acc.planksUsed;
+      planksUsed += acc.planksUsed;
+      cutCount   += acc.cutCount;
+      offcutSaves+= acc.offcutSaves;
+      pieceCount += pieces.length;
+      lamArea    += stairs.area;
+    }
+  }
+
+  const noses = noseRuns(st);
+  const noseMetres = noses.reduce((s,n) => s + n.metres, 0) + (stairs ? stairs.nosing : 0);
+
+  /* Totals. Planks are bought in packs for the whole job, and carpet by the
+     linear metre off one roll, so both are worked out once at the end
+     rather than storey by storey. */
+  const base = tally({...st}, {
+    mode: "building", pieces: [], rows: [], rowCount: 0, ripRows,
+    planksUsed, cutCount, offcutSaves, pool: [],
+    floorArea: lamArea
+  });
+
+  const carpetBought = rollLength * st.rollW / 1e6;
+  const carpetCost = (st.carpetPrice > 0) ? carpetBought * st.carpetPrice : 0;
+
+  return {
+    mode: "building", levels, stairs, noses, noseMetres,
+    planksUsed, cutCount, offcutSaves, pieceCount, ripRows, stairPlanks,
+    withExtra: base.withExtra, packs: base.packs, planksBought: base.planksBought,
+    plankCost: base.cost,
+    laminateArea: lamArea, carpetArea: carArea, floorArea: lamArea + carArea,
+    rollLength, rollLengthM: rollLength/1000, seams, dropCount,
+    carpetBought, carpetCost,
+    cost: base.cost + carpetCost,
+    plankWaste: base.wastePct,
+    carpetWaste: carpetBought > 0 ? (1 - carArea/carpetBought)*100 : 0
+  };
+}
+
 /* ENGINE:END */
 
 /* ---------- state ----------------------------------------------
@@ -1289,8 +1761,125 @@ function bestStagger(st){
    here on top of it is transient and deliberately not.            */
 const state = {
   ...defaultPlan(),
-  focusRect: -1           // index of the rectangle being edited, for highlighting
+  focusRect: -1,          // index of the rectangle being edited, for highlighting
+  level: 0                // the storey being worked on. Where you are looking,
+                          // not something about the building, so not saved.
 };
+
+/* `state.rects` is the current level's rectangles, reached through an accessor
+   rather than copied. Everything that draws or edits the plan works on one
+   storey at a time and can go on saying `state.rects`; switching level changes
+   which array that is. Reading and writing both go through to the level, so
+   `state.rects = [...]` cannot leave a stale array behind — which a plain
+   alias would, silently, and which is the sort of bug that takes an afternoon. */
+Object.defineProperty(state, "rects", {
+  get(){ const lv = state.levels[state.level]; return lv ? lv.rects : []; },
+  set(v){ if(state.levels[state.level]) state.levels[state.level].rects = v; },
+  enumerable: true, configurable: true
+});
+
+function bindLevel(i){
+  const n = (state.levels || []).length;
+  state.level = Math.max(0, Math.min(n - 1, i | 0));
+}
+
+/* ---------- undo ------------------------------------------------
+   Only the shape of the building is remembered: the levels and their
+   areas, the flight, and the edges marked as nosings. Plank length and
+   the like are settings rather than drawing, and snapshotting them
+   would put an entry on the stack for every keystroke in a number
+   field.
+   ---------------------------------------------------------------- */
+const HISTORY_MAX = 60;
+let history = [], histAt = -1, histHold = false;
+
+function roomSnapshot(){
+  return JSON.stringify({
+    levels: state.levels.map(lv => ({
+      name: lv.name, rects: lv.rects.map(r => ({x:r.x, y:r.y, w:r.w, h:r.h, mat:matOf(r)}))
+    })),
+    stairs: {...state.stairs},
+    noseEdges: state.noseEdges.map(n => ({...n})),
+    level: state.level
+  });
+}
+
+/**
+ * Remember where things stood, before changing them.
+ *
+ * The stack holds states, and `histAt` points at the one the current edit
+ * started from — so after an edit the live room is one step *ahead* of the
+ * tip. undo() is what parks it, which is the only way redo can have anything
+ * to go back to.
+ */
+function remember(){
+  if(histHold) return;
+  // Anything ahead of here was a redo branch, and this edit replaces it.
+  history = history.slice(0, histAt + 1);
+  const snap = roomSnapshot();
+  if(history[histAt] !== snap){
+    history.push(snap);
+    if(history.length > HISTORY_MAX) history.shift();
+    histAt = history.length - 1;
+  }
+  updateHistoryButtons();
+}
+
+/** Start again from a given plan, with an empty history. */
+function resetHistory(){
+  history = [roomSnapshot()];
+  histAt = 0;
+  updateHistoryButtons();
+}
+
+function applySnapshot(snap){
+  const s = JSON.parse(snap);
+  state.levels = s.levels.map(lv => ({
+    name: lv.name, rects: lv.rects.map(r => ({...r}))
+  }));
+  state.stairs = {...s.stairs};
+  state.noseEdges = s.noseEdges.map(n => ({...n}));
+  bindLevel(s.level);
+  if(state.focusRect >= state.rects.length) state.focusRect = -1;
+  // The redraw must not push what it just restored back onto the stack.
+  histHold = true;
+  drawLevels();
+  drawAreas();
+  syncInputs();
+  refresh();
+  histHold = false;
+  updateHistoryButtons();
+}
+
+function undo(){
+  if(histAt < 0){ toast("Nothing left to undo."); return; }
+  const now = roomSnapshot();
+  if(history[histAt] !== now){
+    // The room has moved on since the last entry. Park where it is so redo
+    // has somewhere to come back to, then step onto the remembered state.
+    history = history.slice(0, histAt + 1);
+    history.push(now);
+    applySnapshot(history[histAt]);
+    return;
+  }
+  if(histAt === 0){ toast("Nothing left to undo."); return; }
+  histAt--;
+  applySnapshot(history[histAt]);
+}
+
+function redo(){
+  if(histAt >= history.length - 1){ toast("Nothing to redo."); return; }
+  histAt++;
+  applySnapshot(history[histAt]);
+}
+
+function updateHistoryButtons(){
+  const u = document.getElementById("undo-btn"), r = document.getElementById("redo-btn");
+  // There is something to undo if the stack goes back further, or if the room
+  // has been changed since the entry we are sitting on.
+  if(u) u.disabled = !(histAt > 0 || (histAt === 0 && history[0] !== roomSnapshot()));
+  if(r) r.disabled = histAt >= history.length - 1;
+}
 
 /* ---------- formatting ------------------------------------------ */
 const mm  = v => Math.round(v).toLocaleString();
@@ -1432,12 +2021,30 @@ function drawPlan(L, opts){
   const fs = px(COARSE ? 14 : 12);
   const bbReal = bboxOf(state.rects);
 
-  // Clip everything to the true floor outline so planks stop at the walls.
+  // The storey below, as an outline only. Upstairs almost always has to line
+  // up with downstairs, and a ghost is how you check without leaving the level
+  // you are drawing on.
+  if(state.level > 0){
+    levelRects(state, state.level - 1).forEach(r => el("rect", {
+      x:r.x, y:r.y, width:r.w, height:r.h, fill:"none",
+      stroke:"var(--ink-dim)", "stroke-width":1, "stroke-dasharray":"3 5",
+      "vector-effect":"non-scaling-stroke", opacity:.45
+    }));
+  }
+
+  // Each material is clipped to its own areas, so planks stop at the carpet
+  // and the carpet stops at the planks.
+  const lam = state.rects.filter(r => matOf(r) === "laminate");
+  const car = state.rects.filter(r => matOf(r) === "carpet");
   const defs = el("defs", {});
   const clip = el("clipPath", {id:"floor"}, defs);
-  state.rects.forEach(r => el("rect", {x:r.x, y:r.y, width:r.w, height:r.h}, clip));
+  (lam.length ? lam : [{x:0,y:0,w:0,h:0}]).forEach(r =>
+    el("rect", {x:r.x, y:r.y, width:r.w, height:r.h}, clip));
+  const cclip = el("clipPath", {id:"carpetfloor"}, defs);
+  (car.length ? car : [{x:0,y:0,w:0,h:0}]).forEach(r =>
+    el("rect", {x:r.x, y:r.y, width:r.w, height:r.h}, cclip));
 
-  // Floor slab under the planks.
+  // Floor slab under everything, tinted by what is going down on it.
   const slab = el("g", {});
   state.rects.forEach((r,i) => el("rect", {
     x:r.x, y:r.y, width:r.w, height:r.h,
@@ -1447,6 +2054,7 @@ function drawPlan(L, opts){
   // A room too big to lay still draws its shape, so it can be dragged back
   // to a sensible size rather than leaving the user staring at nothing.
   if(L && !L.overflow) drawPieces(L, el, px, quick);
+  if(lastCarpet && !lastCarpet.overflow) drawDrops(lastCarpet, el, px);
 
   // Wall outline.
   state.rects.forEach(r => el("rect", {
@@ -1454,6 +2062,8 @@ function drawPlan(L, opts){
     stroke:"var(--ink)", "stroke-width":2, "vector-effect":"non-scaling-stroke",
     "stroke-linejoin":"miter", opacity:.85
   }));
+
+  drawNosings(el, px);
 
   // Overall dimensions, drawn like a set-out drawing.
   const dimOff = px(16);
@@ -1543,6 +2153,76 @@ function drawPieces(L, el, px, quick){
       }
     }
   });
+}
+
+/** Carpet, as the drops it is actually cut into.
+    Alternating tones are not decoration: the seam between two drops is the
+    thing worth seeing, and a single flat colour hides exactly that. */
+function drawDrops(C, el, px){
+  const layer = el("g", {"clip-path":"url(#carpetfloor)"});
+  C.drops.forEach((d, i) => {
+    const r = d.rect;
+    const node = el("rect", {
+      class:"piece", x:r.x, y:r.y, width:r.w, height:r.h,
+      fill: i % 2 ? "var(--carpet-2)" : "var(--carpet)",
+      stroke:"var(--carpet-edge)", "stroke-width":1, "vector-effect":"non-scaling-stroke"
+    }, layer);
+    node.dataset.info =
+      `drop ${i+1} · ${mm(Math.min(d.w, C.rollW))} × ${mm(d.len)} mm · ` +
+      `${(d.len/1000).toFixed(2)} m off the roll`;
+  });
+  // The pile direction, marked once, because it is the thing that stops a
+  // drop being turned round to save material.
+  const bb = C.bb;
+  const along = C.drops.length ? C.drops[0].rect : null;
+  if(along){
+    // Which way the pile runs is the roll's direction, not the shape of the
+    // drop: a short wide drop still comes off the roll lengthways.
+    const vertical = state.rollDir === "v";
+    // A fifth of the way into the drop rather than the middle of it, which is
+    // where the area's letter already is.
+    const cx = vertical ? along.x + along.w/2 : along.x + along.w*0.2;
+    const cy = vertical ? along.y + along.h*0.2 : along.y + along.h/2;
+    const r = px(14);
+    el("path", {
+      d: vertical ? `M${cx} ${cy-r} L${cx} ${cy+r} M${cx-r*0.4} ${cy+r*0.5} L${cx} ${cy+r} L${cx+r*0.4} ${cy+r*0.5}`
+                  : `M${cx-r} ${cy} L${cx+r} ${cy} M${cx+r*0.5} ${cy-r*0.4} L${cx+r} ${cy} L${cx+r*0.5} ${cy+r*0.4}`,
+      stroke:"var(--mat-2)", "stroke-width":2, fill:"none", opacity:.55,
+      "vector-effect":"non-scaling-stroke", "clip-path":"url(#carpetfloor)"
+    });
+  }
+}
+
+/** The edges marked as a stair nosing, and what each one transitions between. */
+function drawNosings(el, px){
+  const swatch = m => m === "carpet" ? "var(--carpet)"
+                    : m === "laminate" ? "var(--oak)" : "var(--ink-dim)";
+  for(const n of state.noseEdges){
+    if(n.level !== state.level) continue;
+    const r = state.rects[n.rect];
+    if(!r) continue;
+    const e = edgesOf(r).find(x => x.side === n.side);
+    if(!e) continue;
+    const to = beyondEdge(state, state.level, n.rect, n.side);
+    // A nosing is a transition, so it is drawn as one: the trim itself, with a
+    // stripe of each material's colour to either side of it.
+    const off = px(3.5);
+    const nx = (e.side === "w" || e.side === "e") ? 1 : 0;
+    const ny = nx ? 0 : 1;
+    const stripe = (k, colour) => el("line", {
+      x1:e.x1 + nx*off*k, y1:e.y1 + ny*off*k, x2:e.x2 + nx*off*k, y2:e.y2 + ny*off*k,
+      stroke:colour, "stroke-width":2.5, "vector-effect":"non-scaling-stroke", opacity:.9
+    });
+    // Inside the area first, then the far side.
+    const inward = (e.side === "n" || e.side === "w") ? 1 : -1;
+    stripe(inward, swatch(matOf(r)));
+    stripe(-inward, swatch(to));
+    el("line", {
+      x1:e.x1, y1:e.y1, x2:e.x2, y2:e.y2,
+      stroke:"var(--nose)", "stroke-width":4, "stroke-linecap":"round",
+      "vector-effect":"non-scaling-stroke"
+    });
+  }
 }
 
 /* ---- the editing overlay ----
@@ -1674,7 +2354,55 @@ function hitTest(p){
   return {kind:"pan"};
 }
 
+/** The edge nearest a point, if any is close enough to have been meant.
+    Walked topmost first, like every other hit test here, so where two areas
+    share a wall the one drawn on top claims it — and the shorter of the two
+    is usually the doorway the user was aiming at. */
+function nearestEdge(p, tol){
+  let best = null, bestD = tol;
+  for(let i = state.rects.length - 1; i >= 0; i--){
+    const r = state.rects[i];
+    for(const e of edgesOf(r)){
+      const acrossN = (e.side === "n" || e.side === "s");
+      const within = acrossN ? (p.x >= r.x - tol && p.x <= r.x + r.w + tol)
+                             : (p.y >= r.y - tol && p.y <= r.y + r.h + tol);
+      if(!within) continue;
+      const d = acrossN ? Math.abs(p.y - e.y1) : Math.abs(p.x - e.x1);
+      if(d < bestD){ bestD = d; best = {rect:i, side:e.side}; }
+    }
+  }
+  return best;
+}
+
+/** Mark or unmark an edge as a stair nosing. */
+function toggleNose(p){
+  const hit = nearestEdge(p, HIT_PX * 2.2 * view.upp);
+  if(!hit){ toast("Tap nearer the edge you want to mark."); return; }
+  const k = state.noseEdges.findIndex(n =>
+    n.level === state.level && n.rect === hit.rect && n.side === hit.side);
+  remember();
+  if(k >= 0){
+    state.noseEdges.splice(k, 1);
+    toast(`Nosing taken off ${letter(hit.rect)}.`);
+  } else if(state.noseEdges.length >= MAX_NOSE){
+    toast("That is as many nosings as a plan will hold.", true);
+    return;
+  } else {
+    state.noseEdges.push({level:state.level, rect:hit.rect, side:hit.side});
+    const from = matOf(state.rects[hit.rect]);
+    const to = beyondEdge(state, state.level, hit.rect, hit.side);
+    const r = state.rects[hit.rect];
+    const len = (hit.side === "n" || hit.side === "s") ? r.w : r.h;
+    toast(`Nosing on ${letter(hit.rect)} — ${mm(len)} mm, ` +
+          `${from} to ${to === "open" ? "whatever is beyond" : to}.`);
+  }
+  state.focusRect = hit.rect;
+  drawAreas();
+  refresh();
+}
+
 function cursorFor(hit){
+  if(tool === "nose") return "pointer";
   if(tool === "draw") return "crosshair";
   if(hit.kind === "chip") return "text";
   if(hit.kind === "move") return "move";
@@ -1759,6 +2487,7 @@ function closeDimEdit(commit){
   inp.hidden = true;
   const v = fromDisplay(parseFloat(inp.value));
   if(commit && isFinite(v) && state.rects[i]){
+    remember();
     state.rects[i][key] = tidy(Math.max(1, v));
     drawAreas();
   }
@@ -1819,6 +2548,11 @@ function closeDimEdit(commit){
     const p = toWorld(e.clientX, e.clientY);
     const panning = e.button === 1;
 
+    if(tool === "nose" && !panning){
+      toggleNose(p);
+      return;
+    }
+
     if(tool === "draw" && !panning){
       drag = {mode:"draw", from:snapPoint(p), ghost:null, guide:null};
       drawHud();
@@ -1829,8 +2563,10 @@ function closeDimEdit(commit){
     if(hit.kind === "chip"){ openDimEdit(hit.i, hit.k); return; }
 
     if(hit.kind === "resize"){
+      remember();
       drag = {mode:"resize", i:hit.i, hx:hit.hx, hy:hit.hy, start:{...state.rects[hit.i]}};
     } else if(hit.kind === "move"){
+      remember();
       select(hit.i);
       drag = {mode:"move", i:hit.i, start:{...state.rects[hit.i]},
               grab:{x:p.x - state.rects[hit.i].x, y:p.y - state.rects[hit.i].y}};
@@ -1866,7 +2602,10 @@ function closeDimEdit(commit){
     if(drag.mode === "move"){
       const s = snapMoved({x:p.x - drag.grab.x, y:p.y - drag.grab.y,
                            w:drag.start.w, h:drag.start.h}, cands, tol, GRID);
-      state.rects[drag.i] = {x:tidy(s.x), y:tidy(s.y), w:drag.start.w, h:drag.start.h};
+      // The move keeps the material it started with.
+      s.mat = matOf(drag.start);
+      state.rects[drag.i] = {x:tidy(s.x), y:tidy(s.y), w:drag.start.w, h:drag.start.h,
+                             mat:matOf(drag.start)};
       drag.guide = {gx:s.gx, gy:s.gy};
 
     } else if(drag.mode === "resize"){
@@ -1884,7 +2623,8 @@ function closeDimEdit(commit){
         if(drag.hy < 0){ y0 = Math.min(s.v, y1 - MIN_SIDE); if(y0 === s.v) gy = s.at; }
         else           { y1 = Math.max(s.v, y0 + MIN_SIDE); if(y1 === s.v) gy = s.at; }
       }
-      state.rects[drag.i] = {x:tidy(x0), y:tidy(y0), w:tidy(x1-x0), h:tidy(y1-y0)};
+      state.rects[drag.i] = {x:tidy(x0), y:tidy(y0), w:tidy(x1-x0), h:tidy(y1-y0),
+                             mat:matOf(drag.start)};
       drag.guide = {gx, gy};
 
     } else if(drag.mode === "draw"){
@@ -1914,6 +2654,10 @@ function closeDimEdit(commit){
       const g = d.ghost;
       setTool("select");
       if(g && g.w >= MIN_SIDE && g.h >= MIN_SIDE){
+        remember();
+        // A new area is laid in whatever the last one was, which is usually
+        // what you want when drawing a run of rooms.
+        g.mat = state.rects.length ? matOf(state.rects[state.rects.length - 1]) : "laminate";
         state.rects.push(g);
         state.focusRect = state.rects.length - 1;
         drawAreas();
@@ -1954,19 +2698,24 @@ function closeDimEdit(commit){
 
 function setTool(t){
   tool = t;
-  document.getElementById("tool-select").setAttribute("aria-pressed", String(t === "select"));
-  document.getElementById("tool-draw").setAttribute("aria-pressed", String(t === "draw"));
-  document.getElementById("plan").style.cursor = t === "draw" ? "crosshair" : "default";
+  for(const [id, name] of [["tool-select","select"], ["tool-draw","draw"], ["tool-nose","nose"]]){
+    document.getElementById(id).setAttribute("aria-pressed", String(t === name));
+  }
+  document.getElementById("plan").style.cursor =
+    t === "draw" ? "crosshair" : t === "nose" ? "pointer" : "default";
   drawHud();
 }
 
 function deleteSelected(){
   const i = state.focusRect;
   if(i < 0 || !state.rects[i]) return;
-  if(state.rects.length < 2){ toast("A plan needs at least one area.", true); return; }
+  if(state.rects.length < 2){ toast("A level needs at least one area.", true); return; }
+  remember();
   state.rects.splice(i, 1);
+  dropNoseFor(i);
   state.focusRect = Math.min(i, state.rects.length - 1);
   drawAreas();
+  drawLevels();
   refresh();
 }
 
@@ -1974,13 +2723,25 @@ function deleteSelected(){
    a dimension never deletes the area it belongs to. */
 document.addEventListener("keydown", e => {
   const t = document.activeElement;
-  if(t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+  const typing = t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
+  // Undo is the one shortcut that has to work while a field has the focus,
+  // because that is exactly when you notice you have gone wrong.
+  if((e.metaKey || e.ctrlKey) && (e.key === "z" || e.key === "Z")){
+    e.preventDefault();
+    e.shiftKey ? redo() : undo();
+    return;
+  }
+  if((e.metaKey || e.ctrlKey) && (e.key === "y" || e.key === "Y")){
+    e.preventDefault(); redo(); return;
+  }
+  if(typing) return;
   if(e.metaKey || e.ctrlKey || e.altKey) return;
   const sel = state.rects[state.focusRect];
 
   switch(e.key){
     case "v": case "V": setTool("select"); break;
     case "d": case "D": setTool("draw"); break;
+    case "n": case "N": setTool("nose"); break;
     case "0": view.auto = true; refresh(); break;
     case "+": case "=": zoomTo(view.upp/1.3, null); break;
     case "-": case "_": zoomTo(view.upp*1.3, null); break;
@@ -1993,6 +2754,7 @@ document.addEventListener("keydown", e => {
       break;
     case "ArrowLeft": case "ArrowRight": case "ArrowUp": case "ArrowDown": {
       if(!sel) return;
+      remember();
       const step = e.shiftKey ? 100 : GRID;
       if(e.key === "ArrowLeft")  sel.x = tidy(sel.x - step);
       if(e.key === "ArrowRight") sel.x = tidy(sel.x + step);
@@ -2009,6 +2771,11 @@ document.addEventListener("keydown", e => {
 
 document.getElementById("tool-select").addEventListener("click", () => setTool("select"));
 document.getElementById("tool-draw").addEventListener("click", () => setTool("draw"));
+document.getElementById("tool-nose").addEventListener("click", () => setTool("nose"));
+document.getElementById("undo-btn").addEventListener("click", undo);
+document.getElementById("redo-btn").addEventListener("click", redo);
+document.getElementById("level-pick").addEventListener("change", e => goLevel(+e.target.value));
+document.getElementById("add-level").addEventListener("click", addLevel);
 document.getElementById("del-area").addEventListener("click", deleteSelected);
 document.getElementById("zoom-in").addEventListener("click", () => zoomTo(view.upp/1.3, null));
 document.getElementById("zoom-out").addEventListener("click", () => zoomTo(view.upp*1.3, null));
@@ -2029,25 +2796,34 @@ if(window.ResizeObserver){
   new ResizeObserver(() => scheduleDraw()).observe(document.getElementById("plan-stage"));
 }
 
-/* ---- numbers, notes and the cut list ---- */
-function drawResults(L){
+/* ---- numbers, notes and the cut list ----
+   The figures are for the whole building, because that is what you buy;
+   the warnings and the cut list are for the level on screen, because that
+   is what you are about to lay. */
+function drawResults(B){
   const results = document.getElementById("results");
   const notes   = document.getElementById("notes");
   const hl      = document.getElementById("hl-planks");
   const hlSub   = document.getElementById("hl-sub");
+  const L       = lastLayout;              // the current level's planks
+  const C       = lastCarpet;              // and its carpet
 
-  if(!L || L.overflow){
-    results.innerHTML = "";
-    hl.textContent = "—";
+  const clearCuts = () => {
     document.getElementById("cut-rows").innerHTML = "";
     document.getElementById("cut-summary").innerHTML = "";
     document.getElementById("cut-count").textContent = "";
-    if(L && L.overflow){
+  };
+
+  if(!B || B.overflow){
+    results.innerHTML = "";
+    hl.textContent = "—";
+    clearCuts();
+    if(B && B.overflow){
       hlSub.textContent = "check your dimensions";
       notes.innerHTML = `<div class="note warn"><span>!</span><span>
-        That room works out to <b>${mm(L.bb.w)} × ${mm(L.bb.h)} mm</b>, which is far more floor
-        than a plank layout can be drawn for. If you meant metres, switch the unit at the top of
-        the panel rather than typing the figure in millimetres.</span></div>`;
+        One of the levels works out to far more floor than a layout can be drawn for.
+        If you meant metres, switch the unit at the top of the panel rather than typing
+        the figure in millimetres.</span></div>`;
     } else {
       hlSub.textContent = "add an area to start";
       notes.innerHTML = "";
@@ -2055,38 +2831,140 @@ function drawResults(L){
     return;
   }
 
-  const hb = L.mode === "herringbone";
-  hl.textContent = L.withExtra;
-  hlSub.textContent = `planks · ${L.packs} pack${L.packs===1?"":"s"}` +
-    (L.cost > 0 ? ` · ${money(L.cost)}` : "");
+  const hb = state.pattern === "herringbone";
+  const multi = B.levels.length > 1;
+  const anyCarpet = B.carpetArea > 0;
+  const anyPlank  = B.laminateArea > 0;
 
-  const stats = [
-    ["key", L.withExtra,            `planks to buy (incl. ${state.extra}%)`],
-    ["key", L.packs,                `packs of ${state.perPack}`]
-  ];
-  if(L.cost > 0) stats.push(["key", money(L.cost), "material cost"]);
-  stats.push(
-    ["",    L.planksUsed,           "planks actually laid"],
-    ["",    m2(L.floorArea)+" m²",  "floor area"],
-    ["",    L.pieces.length,        "pieces on the floor"],
-    ["",    L.cutCount,             hb ? "border cuts to make" : "cross cuts to make"],
-    ["",    hb ? L.pieces.length - L.cutCount : L.rowCount, hb ? "uncut field planks" : "rows"],
-    ["",    L.wastePct.toFixed(1)+"%", "offcut waste"]
-  );
-  if(L.cost > 0) stats.push(["", money(L.costPerM2)+"/m²", "laid cost per m²"]);
+  hl.textContent = anyPlank ? B.withExtra : (anyCarpet ? B.rollLengthM.toFixed(1) : "—");
+  hlSub.textContent = anyPlank
+    ? `planks · ${B.packs} pack${B.packs===1?"":"s"}` + (B.cost > 0 ? ` · ${money(B.cost)}` : "")
+    : anyCarpet ? `m of carpet` + (B.cost > 0 ? ` · ${money(B.cost)}` : "") : "nothing to lay";
+
+  /* --- the figures --- */
+  const stats = [];
+  if(anyPlank){
+    stats.push(["key", B.withExtra, `planks to buy (incl. ${state.extra}%)`]);
+    stats.push(["key", B.packs, `packs of ${state.perPack}`]);
+  }
+  if(anyCarpet){
+    stats.push(["key", B.rollLengthM.toFixed(1) + " m", `off a ${mm(state.rollW)} mm roll`]);
+  }
+  if(B.cost > 0) stats.push(["key", money(B.cost), "material cost"]);
+  if(anyPlank){
+    stats.push(["", B.planksUsed, "planks actually laid"]);
+    stats.push(["", m2(B.laminateArea) + " m²", "laminate area"]);
+    stats.push(["", B.cutCount, hb ? "border cuts to make" : "cross cuts to make"]);
+    stats.push(["", B.plankWaste.toFixed(1) + "%", "plank waste"]);
+  }
+  if(anyCarpet){
+    stats.push(["", B.dropCount, `drop${B.dropCount===1?"":"s"} to cut`]);
+    stats.push(["", B.seams, `seam${B.seams===1?"":"s"} to join`]);
+    stats.push(["", m2(B.carpetArea) + " m²", "carpet area"]);
+    stats.push(["", B.carpetWaste.toFixed(1) + "%", "carpet waste"]);
+  }
+  if(multi) stats.push(["", B.levels.length, "levels"]);
+  if(B.noseMetres > 0) stats.push(["", B.noseMetres.toFixed(2) + " m", "stair nosing"]);
   results.innerHTML = stats.map(([cls,v,label]) =>
     `<div class="stat ${cls}"><b>${v}</b><span>${label}</span></div>`).join("");
 
-  /* --- practical notes and warnings --- */
+  /* --- practical notes --- */
   const out = [];
+  const here = B.levels[state.level];
 
-  if(L.cost > 0){
-    const basis = state.priceBasis === "pack" ? `${L.packs} pack${L.packs===1?"":"s"}`
-                : state.priceBasis === "plank" ? `${L.planksBought} plank${L.planksBought===1?"":"s"}`
-                : `${m2(L.planksBought*state.plankL*state.plankW/1e6)} m² of product`;
-      out.push([false, `<b>${money(L.cost)}</b> is ${basis} at ${money(state.price)}
-        ${state.priceBasis === "m2" ? "per m²" : "each"}. Whole packs are assumed, so you pay for
-        ${L.planksBought} planks to lay ${L.planksUsed}.`]);
+  if(multi){
+    const per = B.levels.map(lv => {
+      const bits = [];
+      if(lv.laminateArea > 0) bits.push(`${m2(lv.laminateArea)} m² laminate`);
+      if(lv.carpetArea > 0)   bits.push(`${m2(lv.carpetArea)} m² carpet`);
+      return `<b>${lv.name}</b> — ${bits.length ? bits.join(", ") : "nothing laid yet"}`;
+    }).join("; ");
+    out.push([false, `The figures above are the whole building. ${per}. The warnings and
+      the cut list below are for <b>${here ? here.name : "this level"}</b>, which is the
+      one on screen.`]);
+  }
+
+  if(B.cost > 0){
+    const bits = [];
+    if(anyPlank && B.plankCost > 0){
+      const basis = state.priceBasis === "pack" ? `${B.packs} pack${B.packs===1?"":"s"}`
+                  : state.priceBasis === "plank" ? `${B.planksBought} plank${B.planksBought===1?"":"s"}`
+                  : `${m2(B.planksBought*state.plankL*state.plankW/1e6)} m² of product`;
+      bits.push(`${money(B.plankCost)} is ${basis} at ${money(state.price)}
+        ${state.priceBasis === "m2" ? "per m²" : "each"}`);
+    }
+    if(anyCarpet && B.carpetCost > 0){
+      bits.push(`${money(B.carpetCost)} is ${m2(B.carpetBought)} m² of carpet off the roll
+        at ${money(state.carpetPrice)} per m² — you pay for the full width of every drop,
+        not the part that lands on the floor`);
+    }
+    out.push([false, bits.join(". ") + "."]);
+  }
+
+  /* --- carpet --- */
+  if(C && !C.overflow){
+    const across = state.rollDir === "v" ? "top to bottom" : "left to right";
+    out.push([false, `On this level the carpet takes <b>${C.drops.length}</b>
+      drop${C.drops.length===1?"":"s"} running ${across}, <b>${(C.rollLength/1000).toFixed(2)} m</b>
+      off the roll for ${m2(C.floorArea)} m² of floor.` +
+      (C.seams ? ` That leaves <b>${C.seams}</b> seam${C.seams===1?"":"s"} to join — put them
+        where the traffic is lightest and away from a doorway.` : ` No seams: the room fits
+        inside one drop.`)]);
+    if(C.wastePct > 45){
+      out.push([true, `<b>${C.wastePct.toFixed(0)}%</b> of the carpet bought is waste. A room
+        just wider than the roll is the usual cause. Try turning the drops the other way —
+        it often changes the answer a lot.`]);
+    }
+  }
+
+  /* --- stairs --- */
+  if(B.stairs){
+    const s = B.stairs;
+    if(s.mat === "carpet"){
+      out.push([false, `The flight of <b>${s.steps}</b> steps needs
+        <b>${(s.rollLength/1000).toFixed(2)} m</b> off the roll — one length up the whole
+        flight so the pile runs the same way on every step, not a piece per tread.`]);
+    } else {
+      out.push([false, `The flight of <b>${s.steps}</b> steps is clad in
+        <b>${s.pieceCount}</b> pieces of ${mm(s.pieceLen)} mm, ${s.piecesPerStep} per step,
+        and adds <b>${B.stairPlanks}</b> plank${B.stairPlanks===1?"":"s"} to the order. Their
+        offcuts are counted separately from the floor's — a flight is a different day's work.`]);
+    }
+    if(s.nosing){
+      out.push([false, `<b>${(s.nosing).toFixed(2)} m</b> of that nosing figure is the flight
+        itself, at ${mm(s.width)} mm a step.`]);
+    }
+  }
+
+  /* --- nosings --- */
+  if(B.noses.length){
+    const named = m => m === "open" ? "the next room" : m;
+    const byPair = new Map();
+    for(const n of B.noses){
+      const k = `${named(n.from)} → ${named(n.to)}`;
+      byPair.set(k, (byPair.get(k) || 0) + n.metres);
+    }
+    const list = [...byPair.entries()]
+      .map(([k,m]) => `${k}: <b>${m.toFixed(2)} m</b>`).join(", ");
+    out.push([false, `<b>${B.noses.length}</b> edge${B.noses.length===1?"":"s"} marked as a
+      stair nosing — ${list}. A nosing carries the change of material as well as the step,
+      so order the profile that suits both depths.`]);
+    const same = B.noses.filter(n => n.from === n.to);
+    if(same.length){
+      out.push([true, `<b>${same.length}</b> of those edges has the same material either side.
+        A nosing there is a step rather than a transition, which is fine — but check it is
+        the edge you meant.`]);
+    }
+  }
+
+  if(!L){
+    // Nothing but carpet on this level, so no plank warnings and no cut list.
+    notes.innerHTML = out.map(([warn,html]) =>
+      `<div class="note ${warn?"warn":""}"><span>${warn?"!":"·"}</span><span>${html}</span></div>`).join("");
+    document.getElementById("cut-table").style.display = "none";
+    clearCuts();
+    document.getElementById("cut-count").textContent = anyCarpet ? "carpet only on this level" : "";
+    return;
   }
 
   if(hb){
@@ -2094,30 +2972,19 @@ function drawResults(L){
     out.push([false, `Every plank sits at ${L.deg}° to the walls. The ratio here is
       <b>${ratio.toFixed(2)}:1</b> — herringbone reads best near a whole number, and traditional
       blocks run 4:1 or 5:1. Any ratio tiles correctly; it is purely how it looks.`]);
-    out.push([true, `<b>${L.cutCount}</b> border pieces need an angled cut. Herringbone wastes more
-      at the walls than a straight lay, so an allowance of 15% is more usual than 10%.`]);
-    if(state.reuse){
-      // Matching angled offcuts is optimistic, so show the figure without it
-      // too. The honest answer sits between the two.
-      const strict = computeLayout({...state, reuse:false});
-      const range = strict && !strict.overflow
-        ? ` Cutting a fresh plank for every border instead needs <b>${strict.withExtra}</b>
-           (${strict.packs} pack${strict.packs===1?"":"s"}), so the honest answer sits between the two.`
-        : "";
-      out.push([false, `A plank cut on a wall line gives two pieces that fit opposite walls, so the
-        ${L.withExtra}-plank figure assumes you keep and match them. That is optimistic — the cuts
-        are angled and not every pair will marry up.${range}`]);
-    }
+    out.push([true, `<b>${L.cutCount}</b> border pieces on this level need an angled cut.
+      Herringbone wastes more at the walls than a straight lay, so an allowance of 15% is more
+      usual than 10%.`]);
     out.push([false, `Set the border out before you start. Snap a centreline, dry-lay the first
       chevron along it, and work outwards so the pattern stays square to the room rather than
       drifting off one wall.`]);
     notes.innerHTML = out.map(([warn,html]) =>
       `<div class="note ${warn?"warn":""}"><span>${warn?"!":"·"}</span><span>${html}</span></div>`).join("");
     document.getElementById("cut-table").style.display = "none";
-    document.getElementById("cut-rows").innerHTML = "";
+    clearCuts();
     document.getElementById("cut-summary").innerHTML =
       `Herringbone borders are cut in place against the wall line rather than to a list of lengths.
-       Of ${L.pieces.length} pieces, ${L.pieces.length - L.cutCount} go down whole and
+       Of ${L.pieces.length} pieces on this level, ${L.pieces.length - L.cutCount} go down whole and
        ${L.cutCount} are cut to fit.`;
     document.getElementById("cut-count").textContent = `${L.cutCount} border cuts`;
     return;
@@ -2164,15 +3031,15 @@ function drawResults(L){
     out.push([false, `<b>${L.ripRows}</b> row${L.ripRows===1?"":"s"} need a lengthwise rip cut where the floor changes depth. These do not change how many planks you buy, but budget time for them.`]);
   }
   if(state.reuse && L.offcutSaves > 0){
-    out.push([false, `Starting rows with the previous offcut saved <b>${L.offcutSaves}</b> plank${L.offcutSaves===1?"":"s"}. Keep offcuts sorted by length as you go.`]);
+    out.push([false, `Starting rows with the previous offcut saved <b>${L.offcutSaves}</b> plank${L.offcutSaves===1?"":"s"} on this level. Keep offcuts sorted by length as you go.`]);
   }
   if(L.leftoverPool.length){
-    out.push([false, `You will finish with ${L.leftoverPool.length} usable offcut${L.leftoverPool.length===1?"":"s"} — longest ${mm(L.leftoverPool[0])} mm. Keep a couple for future repairs.`]);
+    out.push([false, `You will finish this level with ${L.leftoverPool.length} usable offcut${L.leftoverPool.length===1?"":"s"} — longest ${mm(L.leftoverPool[0])} mm. Keep a couple for future repairs.`]);
   }
   notes.innerHTML = out.map(([warn,html]) =>
     `<div class="note ${warn?"warn":""}"><span>${warn?"!":"·"}</span><span>${html}</span></div>`).join("");
 
-  /* --- cut list --- */
+  /* --- cut list, for the level on screen --- */
   const tbody = document.getElementById("cut-rows");
   const cap = 200;                                   // keep the table readable
   tbody.innerHTML = L.rows.slice(0,cap).map(r => {
@@ -2195,7 +3062,118 @@ function drawResults(L){
     ? "Cuts by length: " + sorted.map(([len,n]) => `<span class="pill cut">${mm(len)}&nbsp;×${n}</span>`).join("")
     : "No cutting needed — every piece is a full plank.";
   document.getElementById("cut-count").textContent =
-    `${L.cutCount} cut${L.cutCount===1?"":"s"} across ${L.rowCount} rows`;
+    `${L.cutCount} cut${L.cutCount===1?"":"s"} across ${L.rowCount} rows` +
+    (multi && here ? ` on ${here.name}` : "");
+}
+
+/* ---- levels ----
+   The building is a stack of floors and only one is drawn at a time. The
+   switcher in the plan toolbar and the list here are two views of the same
+   thing, exactly as the areas and the drawing are. */
+function drawLevels(){
+  const box = document.getElementById("levels");
+  box.innerHTML = "";
+  state.levels.forEach((lv, i) => {
+    const row = document.createElement("div");
+    row.className = "level-row";
+    row.innerHTML =
+      `<span class="tag" data-golevel="${i}" title="Work on ${lv.name}">${i + 1}</span>` +
+      `<input type="text" maxlength="40" data-lvname="${i}" value="${lv.name.replace(/"/g,"&quot;")}"
+              aria-label="Name of level ${i + 1}">` +
+      `<span class="count">${lv.rects.length}</span>` +
+      `<button class="x-btn" data-lvdel="${i}" aria-label="Remove ${lv.name}"
+               ${state.levels.length < 2 ? "disabled" : ""}>✕</button>`;
+    box.appendChild(row);
+  });
+
+  box.querySelectorAll("[data-golevel]").forEach(t =>
+    t.addEventListener("click", e => goLevel(+e.currentTarget.dataset.golevel)));
+  box.querySelectorAll("[data-lvname]").forEach(inp => {
+    inp.addEventListener("input", e => {
+      const i = +e.target.dataset.lvname;
+      state.levels[i].name = e.target.value.slice(0, 40) || `Level ${i + 1}`;
+      fillLevelPick();
+      writePlanText();
+    });
+    inp.addEventListener("change", remember);
+  });
+  box.querySelectorAll("[data-lvdel]").forEach(b =>
+    b.addEventListener("click", e => removeLevel(+e.currentTarget.dataset.lvdel)));
+
+  markLevelRows();
+  fillLevelPick();
+}
+
+function markLevelRows(){
+  document.querySelectorAll("#levels .level-row").forEach((row, i) =>
+    row.classList.toggle("sel", i === state.level));
+}
+
+function fillLevelPick(){
+  const sel = document.getElementById("level-pick");
+  if(!sel) return;
+  sel.innerHTML = state.levels
+    .map((lv, i) => `<option value="${i}">${lv.name}</option>`).join("");
+  sel.value = String(state.level);
+}
+
+function goLevel(i){
+  if(i === state.level || !state.levels[i]) return;
+  bindLevel(i);
+  state.focusRect = -1;
+  view.auto = true;            // a different storey deserves a fresh look at it
+  drawLevels();
+  drawAreas();
+  refresh();
+}
+
+function addLevel(){
+  if(state.levels.length >= MAX_LEVELS){
+    toast(`A plan holds at most ${MAX_LEVELS} levels.`, true);
+    return;
+  }
+  remember();
+  // A new storey starts as a copy of the one below: most buildings have the
+  // same footprint upstairs, and it is far quicker to trim than to redraw.
+  const below = state.levels[state.level];
+  state.levels.splice(state.level + 1, 0, {
+    name: `Level ${state.levels.length + 1}`,
+    rects: below.rects.map(r => ({...r}))
+  });
+  shiftNoseLevels(state.level + 1, +1);
+  bindLevel(state.level + 1);
+  state.focusRect = -1;
+  drawLevels();
+  drawAreas();
+  refresh();
+  toast(`Added ${state.levels[state.level].name}, traced from the level below.`);
+}
+
+function removeLevel(i){
+  if(state.levels.length < 2){ toast("A plan needs at least one level.", true); return; }
+  remember();
+  state.levels.splice(i, 1);
+  state.noseEdges = state.noseEdges.filter(n => n.level !== i);
+  shiftNoseLevels(i, -1);
+  bindLevel(Math.min(state.level, state.levels.length - 1));
+  state.focusRect = -1;
+  drawLevels();
+  drawAreas();
+  refresh();
+}
+
+/** Keep nosing edges pointing at the right storey after one is added or removed. */
+function shiftNoseLevels(from, by){
+  state.noseEdges.forEach(n => { if(n.level >= from) n.level += by; });
+}
+
+/** And at the right area after one is removed from the current level. */
+function dropNoseFor(rectIndex){
+  state.noseEdges = state.noseEdges
+    .filter(n => !(n.level === state.level && n.rect === rectIndex));
+  state.noseEdges.forEach(n => {
+    if(n.level === state.level && n.rect > rectIndex) n.rect--;
+  });
 }
 
 /* ---- the rectangle editor ----
@@ -2209,10 +3187,14 @@ function drawAreas(){
   state.rects.forEach((r,i) => {
     const row = document.createElement("div");
     row.className = "area-row";
+    const mat = matOf(r);
     row.innerHTML = `<span class="tag" data-sel="${i}" title="Select area ${letter(i)}">${letter(i)}</span>` +
       ["x","y","w","h"].map(k =>
         `<input type="number" step="${step}" data-i="${i}" data-k="${k}" value="${toDisplay(r[k])}"
            aria-label="Area ${letter(i)} ${k}">`).join("") +
+      `<button class="mat-btn" data-mat="${mat}" data-matidx="${i}"
+               title="${letter(i)} is ${mat} — click for the other"
+               aria-label="Area ${letter(i)} material: ${mat}"><i></i></button>` +
       `<button class="x-btn" data-del="${i}" aria-label="Remove area ${letter(i)}" ${state.rects.length<2?"disabled":""}>✕</button>`;
     box.appendChild(row);
   });
@@ -2225,6 +3207,9 @@ function drawAreas(){
       state.rects[+i][k] = (k === "w" || k === "h") ? Math.max(1, v) : v;
       refresh();
     });
+    // A typed figure lands on the stack when the field is done with, not on
+    // every keystroke.
+    inp.addEventListener("change", remember);
     // Focusing a field selects that area on the plan. It stays selected
     // afterwards, because the selection is now something the user drives
     // from either side rather than a passing highlight.
@@ -2235,15 +3220,30 @@ function drawAreas(){
       state.focusRect = +e.currentTarget.dataset.sel;
       markAreaRows(); refresh();
     }));
+  box.querySelectorAll("[data-matidx]").forEach(b =>
+    b.addEventListener("click", e => setMaterial(+e.currentTarget.dataset.matidx)));
   box.querySelectorAll("[data-del]").forEach(b =>
     b.addEventListener("click", e => {
       const i = +e.currentTarget.dataset.del;
+      remember();
       state.rects.splice(i, 1);
+      dropNoseFor(i);
       if(state.focusRect >= state.rects.length) state.focusRect = state.rects.length - 1;
-      drawAreas(); refresh();
+      drawAreas(); drawLevels(); refresh();
     }));
   markAreaRows();
   document.getElementById("unit-note").textContent = state.units === "m" ? "metres" : "mm";
+}
+
+/** Flip one area between the two materials. */
+function setMaterial(i, to){
+  const r = state.rects[i];
+  if(!r) return;
+  remember();
+  r.mat = to || (matOf(r) === "laminate" ? "carpet" : "laminate");
+  state.focusRect = i;
+  drawAreas();
+  refresh();
 }
 
 /** Show which row is the selected area, without rebuilding the list. */
@@ -2451,22 +3451,38 @@ function syncInputs(){
   set("priceBasis", state.priceBasis);
   set("price", state.price);
   set("currency", state.currency);
+  set("rollW", state.rollW);
+  set("rollDir", state.rollDir);
+  set("carpetPrice", state.carpetPrice);
+  set("stSteps", state.stairs.steps);
+  set("stWidth", state.stairs.width);
+  set("stTread", state.stairs.tread);
+  set("stRiser", state.stairs.riser);
+  set("stMat", state.stairs.mat);
+  document.getElementById("stNosing").checked = state.stairs.nosing;
   document.getElementById("reuse").checked = state.reuse;
-  document.getElementById("cur-sym").textContent = state.currency;
+  document.querySelectorAll(".cur-sym").forEach(e => { e.textContent = state.currency; });
 }
 
 /** Replace everything the user can edit, then redraw the lot. */
 function applyPlan(plan, note, bad){
   Object.assign(state, plan);
-  state.rects = plan.rects.map(r => ({...r}));
+  state.levels = plan.levels.map(lv => ({
+    name: lv.name, rects: lv.rects.map(r => ({...r}))
+  }));
+  state.stairs = {...plan.stairs};
+  state.noseEdges = plan.noseEdges.map(n => ({...n}));
+  bindLevel(0);
   state.focusRect = -1;
   view.auto = true;              // a different room deserves a fresh look at it
   setTool("select");
   syncInputs();
+  drawLevels();
   drawAreas();
   drawPickers();
   refresh();
   writePlanText();
+  resetHistory();
   if(note) toast(note, bad);
 }
 
@@ -2571,12 +3587,19 @@ document.getElementById("plan-name").addEventListener("input", e => {
 /* ================================================================
    WIRING
    ================================================================ */
-let lastLayout = null;      // kept so panning and zooming need not recompute
+let lastLayout = null;      // the current level's planks, kept so panning and
+                            // zooming need not recompute them
+let lastCarpet = null;      // and its carpet drops
+let lastBuilding = null;    // every level, the flight and the totals
 
 function refresh(){
-  lastLayout = computeLayout(state);
+  updateHistoryButtons();
+  lastBuilding = computeBuilding(state);
+  const lv = lastBuilding.levels && lastBuilding.levels[state.level];
+  lastLayout = lv ? lv.planks : null;
+  lastCarpet = lv ? lv.carpet : null;
   drawPlan(lastLayout);
-  drawResults(lastLayout);
+  drawResults(lastBuilding);
   drawHud();
   writePlanText();
 }
@@ -2617,8 +3640,33 @@ document.getElementById("priceBasis").addEventListener("change", e => {
 });
 document.getElementById("currency").addEventListener("input", e => {
   state.currency = e.target.value || "$";
-  document.getElementById("cur-sym").textContent = state.currency;
+  document.querySelectorAll(".cur-sym").forEach(el => { el.textContent = state.currency; });
   refresh();
+});
+bindNumber("rollW","rollW",500);
+bindNumber("carpetPrice","carpetPrice",0);
+document.getElementById("rollDir").addEventListener("change", e => {
+  state.rollDir = e.target.value; refresh();
+});
+
+/* The flight. Every field lands on the undo stack when it is done with
+   rather than on each keystroke. */
+[["stSteps","steps",0],["stWidth","width",100],["stTread","tread",100],["stRiser","riser",50]]
+  .forEach(([id, key, min]) => {
+    const el = document.getElementById(id);
+    el.addEventListener("input", () => {
+      const v = parseFloat(el.value);
+      if(!isFinite(v)) return;
+      state.stairs[key] = Math.max(min, v);
+      refresh();
+    });
+    el.addEventListener("change", remember);
+  });
+document.getElementById("stMat").addEventListener("change", e => {
+  remember(); state.stairs.mat = e.target.value; refresh();
+});
+document.getElementById("stNosing").addEventListener("change", e => {
+  remember(); state.stairs.nosing = e.target.checked; refresh();
 });
 document.getElementById("units").addEventListener("change", e => {
   state.units = e.target.value;
@@ -2626,26 +3674,36 @@ document.getElementById("units").addEventListener("change", e => {
   refresh();                     // the chips on the plan carry units as well
 });
 document.getElementById("add-area").addEventListener("click", () => {
-  const bb = bboxOf(state.rects);
-  const r = {x:bb.x+bb.w, y:bb.y, w:1500, h:1500};
+  remember();
+  const bb = state.rects.length ? bboxOf(state.rects) : {x:0, y:0, w:0, h:0};
+  const r = {x:bb.x+bb.w, y:bb.y, w:1500, h:1500,
+             mat: state.rects.length ? matOf(state.rects[state.rects.length-1]) : "laminate"};
   state.rects.push(r);
   state.focusRect = state.rects.length - 1;
   ensureVisible(r);              // no use adding an area off the edge of the view
-  drawAreas(); refresh();
+  drawAreas(); drawLevels(); refresh();
 });
 document.querySelectorAll("[data-preset]").forEach(b =>
   b.addEventListener("click", () => {
-    state.rects = PRESETS[b.dataset.preset].map(r => ({...r}));
+    remember();
+    // state.rects is the level's own array, so it is emptied and refilled
+    // rather than replaced — swapping it would leave the level holding the old one.
+    state.rects.length = 0;
+    PRESETS[b.dataset.preset].forEach(r => state.rects.push({...r, mat:"laminate"}));
+    state.noseEdges = state.noseEdges.filter(n => n.level !== state.level);
     state.focusRect = -1;
     view.auto = true;
-    drawAreas(); refresh();
+    drawAreas(); drawLevels(); refresh();
   }));
 
 /* ---- start up ---- */
+bindLevel(0);
 syncInputs();
+drawLevels();
 drawAreas();
 drawPickers();
 refresh();
+resetHistory();
 </script>
 </body>
 </html>

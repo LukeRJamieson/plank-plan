@@ -31,6 +31,54 @@ dependencies and its own README; nothing in it is needed to work on the web
 version, and the web version is still the primary one. See **The app builds**
 below before touching it.
 
+## Levels, materials and the flight
+
+A plan is a **stack of levels**, each with its own areas, and every area
+carries a **material** — `laminate` or `carpet`. A flight of **stairs** belongs
+to the building rather than to any level, because a flight is the hole between
+two floors and not part of either one's footprint. Marked **nosings** are edges
+of an area, stored as `{level, rect, side}`.
+
+`state.rects` is the current level's rectangles, reached through an accessor
+rather than copied. Everything that draws or edits works on one storey at a
+time and can go on saying `state.rects`; `bindLevel` changes which array that
+is. Reading *and* writing both go through, so `state.rects = [...]` cannot
+leave a stale array behind — a plain alias would, silently.
+
+The engines never see each other's areas: `computeLevel` hands the plank
+engine only the laminate rectangles and the carpet sweep only the carpet ones,
+so neither needed to learn the other exists. `computeBuilding` runs every
+level and totals them, and the totals are what get the extra allowance and the
+pack rounding — you buy for the job, not per storey. Two levels of one plank
+each is one pack, and there is a test on it.
+
+`computeCarpet` is deliberately the same shape as `computeStraight`: bands of
+roll width across the room, then the covered intervals within each band. Each
+interval is one drop, because a drop is cut as a single piece. Roll length is
+simply every drop laid end to end — you buy the full width whatever the drop
+needs — which is also how a carpet shop quotes it.
+
+Nosing edges are indices, so anything that removes or reorders an area or a
+level has to fix them up: `dropNoseFor`, `shiftNoseLevels`, and a filter in
+`sanitisePlan` that drops any edge naming an area that is no longer there.
+
+## Undo
+
+`remember()` is called **before** a change and records the state the edit
+started from, so after an edit the live room is one step *ahead* of the stack
+tip. `undo()` is what parks the current state as a redo target before stepping
+back — which is the only way redo has anything to return to. Getting this
+wrong is easy: an earlier draft de-duplicated the pre-change snapshot against
+the tip, which meant the very first edit recorded nothing and undo did nothing.
+
+Only the shape of the building is remembered — levels, areas, the flight,
+the nosings. Plank length and the like are settings rather than drawing, and
+snapshotting them would put an entry on the stack for every keystroke in a
+number field. Typed figures land on the stack on `change`, not on `input`.
+
+`histHold` stops the redraw inside `applySnapshot` pushing back what it has
+just restored.
+
 ## The plan view
 
 The drawing is a camera on the room, not a fixed picture of it. `view` holds
@@ -372,6 +420,11 @@ The tests encode these; break one and something is wrong.
 | Join gap | How far apart the joins in neighbouring rows actually fall. Not the stagger: joins repeat every plank length, so it is `min(d, plankL - d)`. |
 | Herringbone | Square-ended planks in interlocking perpendicular pairs, usually at 45° to the walls. |
 | Field | The main body of the floor away from the borders. A field plank goes down uncut. |
+| Drop | One length of carpet cut off the roll. Its width is the roll's; its length is the run it has to cover. |
+| Seam | Where two drops are joined. Kept away from doorways and daylight. |
+| Pile | The direction carpet fibres lie. It has to match across every drop, which is why a drop cannot be turned round. |
+| Tread / riser | The flat of a step and its vertical face. Both need covering. |
+| Nosing | The trim finishing the front edge of a step, and where two materials meet. |
 
 ## Deliberate simplifications
 
@@ -400,11 +453,24 @@ Don't "fix" these without asking — they are choices, not oversights.
   and per-m² prices are charged on what you take home, not what you lay. Set
   planks per pack to 1 for loose planks.
 - **The cut list caps at 200 rows** to keep the table readable.
+- **Carpet seams are counted as drops − 1.** Every drop after the first has to
+  be joined to what is already down. Where the seams actually fall is a fitter's
+  decision about traffic and daylight, not a thing to compute.
+- **A drop is never turned round.** The pile has to run the same way
+  throughout, so an offcut cannot be rotated to save material the way a plank
+  offcut can. That is why carpet has no equivalent of the offcut pool.
+- **Stair offcuts are kept apart from the floor's.** A flight is a different
+  day's work and the short lengths off it rarely find their way back into a
+  room.
+- **A nosing is a length, not a profile.** The app works out how many metres
+  of it you need and what it transitions between; which profile suits both
+  depths is a question for the merchant.
 - **Dragging snaps to edges and a 10 mm grid, not to a constraint solver.**
   There is no "keep these two areas touching" relationship — move one and the
   other stays where it was put.
-- **No undo.** Dragging is reversible by dragging back, and the plan text in the
-  rail is a manual snapshot, but there is no history stack.
+- **Undo covers the drawing, not the settings.** The room, the levels, the
+  flight and the nosings are on the stack; plank length, stagger and price are
+  not.
 - `computeLayout` returns `{ overflow: true }` above ~40,000 pieces. That guard
   exists because typing `5000` into a millimetre field while thinking in metres
   would otherwise lock the page up. Keep it.
@@ -464,8 +530,10 @@ quick syntax sanity check if you want one.
 ## Ideas not yet built
 
 - Underlay and trim quantities (perimeter length is already derivable).
+- Vinyl and tile, which would each be another material with its own sweep.
+- Pattern repeat on carpet, which forces drops to line up and changes the maths.
+- Stairs drawn on the plan, so a winder or a half-landing could be described.
 - A print stylesheet, so the cut list can go in a pocket.
-- Undo, which the plan view rather wants now that a drag can change the room.
 - Rotating an area, which the whole engine currently assumes cannot happen.
 - Deduct the expansion gap properly, which needs a real polygon inset rather
   than a per-rectangle one.

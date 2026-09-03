@@ -49,6 +49,9 @@ The plan is a proper drawing surface, not a picture of the answer.
 | Resize | Drag any of the eight handles | Same, drawn larger for a finger |
 | Set a size exactly | Click the figure on the selected area and type it | Tap it |
 | Draw a new area | **Draw** or `D`, then drag one out | **Draw**, then drag |
+| Mark a stair nosing | **Nose** or `N`, then click an edge | **Nose**, then tap |
+| Undo / redo | `Ctrl+Z` / `Ctrl+Shift+Z`, or the toolbar | The toolbar |
+| Change level | The picker on the plan toolbar | Same |
 | Nudge | Arrow keys, 10 mm, or 100 mm with shift | — |
 | Delete | **Delete**, or the `Delete` key | **Delete** |
 
@@ -61,9 +64,35 @@ On anything wider than a tablet in portrait the page becomes two panes that
 scroll separately — settings on the left, the drawing filling the right — so
 nothing has to be scrolled to while you work.
 
+## Levels, carpet and stairs
+
+A plan is a stack of **levels**, so a whole house goes in one file. Each level
+is drawn on its own with the storey below showing as a ghost, and the materials
+are added up across the building — you buy for the job, not per floor.
+
+Every area you draw is finished in **laminate** or **carpet**, toggled from the
+swatch on its row. Carpet is not divided by area: it comes off a roll of fixed
+width in lengths called drops, the pile has to run the same way in all of them,
+so the app simulates the drops and tells you how many seams that leaves. Turning
+the drops the other way often changes the answer a lot.
+
+A flight of **stairs** is described rather than drawn — steps, width, tread,
+riser — because a flight is the hole between two floors and not part of either
+one's footprint. Carpet runs up it as one length; laminate is counted as the
+plank widths it takes to clad each tread and riser.
+
+Mark any edge as a **stair nosing** with the Nose tool and the app works out
+how many metres you need and which two materials it transitions between.
+
+**Undo** covers all of it — Ctrl+Z, or the buttons on the plan toolbar.
+
 ## What it accounts for
 
 - Rooms made of any number of rectangles, overlapping or not
+- **Multiple levels**, totalled across the building
+- **Laminate or carpet** per area, with carpet worked out as drops off a roll
+- **Stairs**, carpeted as one run or clad in plank widths
+- **Stair nosings** on any edge, naming the transition they make
 - **Straight rows** or **herringbone**, the latter at 45°, 135°, 0° or 90°
 - Plank direction and starting corner (all eight combinations)
 - A set-out point, so the pattern can start anywhere rather than hard against a

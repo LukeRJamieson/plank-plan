@@ -523,18 +523,309 @@ test("a bigger allowance never costs less", () => {
 });
 
 /* ---------------------------------------------------------------- */
+/* Carpet                                                           */
+/* ---------------------------------------------------------------- */
+
+test("a room narrower than the roll is one drop and no seam", () => {
+  const C = computeCarpet(bld({ rects: [{ x: 0, y: 0, w: 3000, h: 4000 }] }));
+  assert.equal(C.drops.length, 1);
+  assert.equal(C.seams, 0);
+  assert.equal(C.rollLength, 4000);
+});
+
+test("a room wider than the roll takes a second drop and a seam", () => {
+  // 5 m wide off a 4 m roll: one full drop and a 1 m one beside it.
+  const C = computeCarpet(bld({ rects: [{ x: 0, y: 0, w: 5000, h: 3200 }] }));
+  assert.equal(C.drops.length, 2);
+  assert.equal(C.seams, 1);
+  // Both drops run the full depth, so the roll gives up two 3.2 m lengths.
+  assert.equal(C.rollLength, 6400);
+  assert.ok(Math.abs(C.boughtArea - 6.4 * 4) < 1e-9);
+  assert.ok(Math.abs(C.floorArea - 16) < 1e-9);
+});
+
+test("turning the drops can change how much carpet it takes", () => {
+  const rects = [{ x: 0, y: 0, w: 5000, h: 3200 }];
+  const down = computeCarpet(bld({ rects, rollDir: "v" }));
+  const across = computeCarpet(bld({ rects, rollDir: "h" }));
+  // Across the room, 3.2 m fits inside one 4 m drop of 5 m.
+  assert.equal(across.drops.length, 1);
+  assert.equal(across.rollLength, 5000);
+  assert.ok(across.rollLength < down.rollLength, "turning the roll should have helped here");
+});
+
+test("carpet never claims to cover less floor than there is", () => {
+  for (const key of Object.keys(PRESETS)) {
+    const rects = PRESETS[key].map(r => ({ ...r }));
+    const C = computeCarpet(bld({ rects }));
+    assert.ok(C.boughtArea >= C.floorArea - 1e-9,
+      `${key}: bought ${C.boughtArea} for ${C.floorArea}`);
+    assert.ok(C.wastePct >= -1e-9 && C.wastePct < 100);
+  }
+});
+
+test("an L-shape gives shorter drops where the room is shallower", () => {
+  // The L preset is 5000 wide overall but only 2600 wide below y=3200.
+  const C = computeCarpet(bld({ rects: PRESETS.l.map(r => ({ ...r })), rollW: 2000 }));
+  assert.ok(C.drops.length >= 3);
+  const lengths = C.drops.map(d => d.len);
+  assert.ok(Math.max(...lengths) > Math.min(...lengths),
+    "every drop came out the same length on an L-shape");
+});
+
+test("carpet drops come back in room coordinates for drawing", () => {
+  const C = computeCarpet(bld({ rects: [{ x: 100, y: 200, w: 5000, h: 3200 }] }));
+  for (const d of C.drops) {
+    assert.ok(d.rect.x >= 100 - EPS && d.rect.y >= 200 - EPS,
+      "a drop landed outside the room it belongs to");
+  }
+});
+
+/* ---------------------------------------------------------------- */
+/* Stairs                                                           */
+/* ---------------------------------------------------------------- */
+
+test("no steps means no flight", () => {
+  assert.equal(computeStairs(bld()), null);
+  assert.equal(computeStairs(bld({ stairs: { steps: 0, width: 900 } })), null);
+});
+
+test("a carpeted flight is one length up the whole run", () => {
+  const S = computeStairs(bld({
+    stairs: { steps: 13, width: 900, tread: 280, riser: 175, mat: "carpet", nosing: true }
+  }));
+  // 13 steps of 455 mm of material each, in a single drop.
+  assert.equal(S.perStep, 455);
+  assert.equal(S.run, 13 * 455);
+  assert.equal(S.drops, 1);
+  assert.equal(S.rollLength, 13 * 455);
+  assert.ok(Math.abs(S.area - 13 * 900 * 455 / 1e6) < 1e-9);
+});
+
+test("a wide flight needs a drop for every roll width across it", () => {
+  const S = computeStairs(bld({
+    rollW: 1000,
+    stairs: { steps: 10, width: 2500, tread: 250, riser: 180, mat: "carpet", nosing: false }
+  }));
+  assert.equal(S.drops, 3);                 // 2.5 m across a 1 m roll
+  assert.equal(S.rollLength, 3 * 10 * 430);
+});
+
+test("a laminate flight is clad in plank widths across each face", () => {
+  const S = computeStairs(bld({
+    plankW: 192,
+    stairs: { steps: 12, width: 900, tread: 280, riser: 175, mat: "laminate", nosing: true }
+  }));
+  // A 280 mm tread takes two 192 mm widths, a 175 mm riser takes one.
+  assert.equal(S.piecesPerStep, 3);
+  assert.equal(S.pieceCount, 36);
+  assert.equal(S.pieceLen, 900);
+});
+
+test("the nosing figure counts one per step, and only when asked for", () => {
+  const on = computeStairs(bld({
+    stairs: { steps: 13, width: 900, tread: 280, riser: 175, mat: "carpet", nosing: true }
+  }));
+  const off = computeStairs(bld({
+    stairs: { steps: 13, width: 900, tread: 280, riser: 175, mat: "carpet", nosing: false }
+  }));
+  assert.ok(Math.abs(on.nosing - 13 * 0.9) < 1e-9);
+  assert.equal(off.nosing, 0);
+});
+
+/* ---------------------------------------------------------------- */
+/* Stair nosings                                                    */
+/* ---------------------------------------------------------------- */
+
+test("an edge knows how long it is and which way round it faces", () => {
+  const e = edgesOf({ x: 100, y: 200, w: 800, h: 600 });
+  assert.equal(e.length, 4);
+  assert.equal(e.find(x => x.side === "n").len, 800);
+  assert.equal(e.find(x => x.side === "e").len, 600);
+  assert.equal(e.find(x => x.side === "s").y1, 800);
+  assert.equal(e.find(x => x.side === "w").x1, 100);
+});
+
+test("a nosing names the material on either side of it", () => {
+  const st = bld({
+    levels: [{ name: "G", rects: [
+      { x: 0, y: 0, w: 3000, h: 3000, mat: "laminate" },
+      { x: 3000, y: 0, w: 2000, h: 3000, mat: "carpet" }
+    ]}],
+    noseEdges: [{ level: 0, rect: 0, side: "e" }]
+  });
+  const runs = noseRuns(st);
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0].from, "laminate");
+  assert.equal(runs[0].to, "carpet");
+  assert.equal(runs[0].metres, 3);
+});
+
+test("an edge with nothing beyond it transitions to open", () => {
+  const st = bld({
+    levels: [{ name: "G", rects: [{ x: 0, y: 0, w: 3000, h: 3000, mat: "carpet" }] }],
+    noseEdges: [{ level: 0, rect: 0, side: "w" }]
+  });
+  assert.equal(noseRuns(st)[0].to, "open");
+  assert.equal(beyondEdge(st, 0, 0, "n"), "open");
+});
+
+test("a nosing on an area that has gone is dropped, not carried", () => {
+  const st = bld({
+    levels: [{ name: "G", rects: [{ x: 0, y: 0, w: 1000, h: 1000, mat: "laminate" }] }],
+    noseEdges: [{ level: 0, rect: 5, side: "n" }, { level: 9, rect: 0, side: "n" }]
+  });
+  assert.deepEqual(noseRuns(st), []);
+  const { plan } = sanitisePlan(st);
+  assert.deepEqual(plan.noseEdges, []);
+});
+
+/* ---------------------------------------------------------------- */
+/* Levels and the building total                                    */
+/* ---------------------------------------------------------------- */
+
+test("a level lays only the areas made of the right stuff", () => {
+  const st = bld({ levels: [{ name: "G", rects: [
+    { x: 0, y: 0, w: 4000, h: 3000, mat: "laminate" },
+    { x: 4000, y: 0, w: 2000, h: 3000, mat: "carpet" }
+  ]}]});
+  const lv = computeLevel(st, 0);
+  assert.ok(lv.planks && lv.planks.planksUsed > 0);
+  assert.ok(lv.carpet && lv.carpet.drops.length > 0);
+  assert.ok(Math.abs(lv.laminateArea - 12) < 1e-9);
+  assert.ok(Math.abs(lv.carpetArea - 6) < 1e-9);
+  // Neither engine sees the other's areas.
+  assert.ok(Math.abs(lv.planks.floorArea - 12) < 1e-9);
+  assert.ok(Math.abs(lv.carpet.floorArea - 6) < 1e-9);
+});
+
+test("an area with no material named is laminate", () => {
+  assert.equal(matOf({ x: 0, y: 0, w: 1, h: 1 }), "laminate");
+  assert.equal(matOf({ mat: "shagpile" }), "laminate");
+  assert.equal(matOf({ mat: "carpet" }), "carpet");
+  assert.equal(matOf(null), "laminate");
+});
+
+test("the building adds its levels up", () => {
+  const one = bld();
+  const two = bld({ levels: [
+    { name: "G", rects: PRESETS.l.map(r => ({ ...r, mat: "laminate" })) },
+    { name: "F", rects: PRESETS.l.map(r => ({ ...r, mat: "laminate" })) }
+  ]});
+  const a = computeBuilding(one), b = computeBuilding(two);
+  assert.equal(b.planksUsed, a.planksUsed * 2);
+  assert.ok(Math.abs(b.laminateArea - a.laminateArea * 2) < 1e-9);
+  assert.equal(b.levels.length, 2);
+  // Packs are bought once for the job, not once per storey.
+  assert.ok(b.packs <= a.packs * 2);
+});
+
+test("planks are bought for the whole job, not rounded up per level", () => {
+  // Two levels of one plank each is two planks, and one pack.
+  const st = bld({ perPack: 8, extra: 0, levels: [
+    { name: "G", rects: [{ x: 0, y: 0, w: 1285, h: 192, mat: "laminate" }] },
+    { name: "F", rects: [{ x: 0, y: 0, w: 1285, h: 192, mat: "laminate" }] }
+  ]});
+  const B = computeBuilding(st);
+  assert.equal(B.planksUsed, 2);
+  assert.equal(B.packs, 1);
+});
+
+test("a carpeted flight is added to the roll, a laminate one to the planks", () => {
+  const floors = { name: "G", rects: [{ x: 0, y: 0, w: 3000, h: 3000, mat: "laminate" }] };
+  const plain = computeBuilding(bld({ levels: [floors] }));
+  const carpeted = computeBuilding(bld({ levels: [floors],
+    stairs: { steps: 13, width: 900, tread: 280, riser: 175, mat: "carpet", nosing: true } }));
+  const laminated = computeBuilding(bld({ levels: [floors],
+    stairs: { steps: 13, width: 900, tread: 280, riser: 175, mat: "laminate", nosing: true } }));
+
+  assert.ok(carpeted.rollLength > 0 && carpeted.carpetArea > 0);
+  assert.equal(carpeted.planksUsed, plain.planksUsed, "carpet stairs must not need planks");
+  assert.equal(laminated.rollLength, 0, "laminate stairs must not need carpet");
+  assert.ok(laminated.planksUsed > plain.planksUsed);
+  assert.ok(laminated.stairPlanks > 0);
+});
+
+test("the nosing total covers both the marked edges and the flight", () => {
+  const st = bld({
+    levels: [{ name: "G", rects: [{ x: 0, y: 0, w: 3000, h: 2000, mat: "laminate" }] }],
+    noseEdges: [{ level: 0, rect: 0, side: "n" }],      // 3 m
+    stairs: { steps: 10, width: 900, tread: 280, riser: 175, mat: "carpet", nosing: true }
+  });
+  const B = computeBuilding(st);
+  assert.ok(Math.abs(B.noseMetres - (3 + 10 * 0.9)) < 1e-9, `got ${B.noseMetres}`);
+});
+
+test("an empty level is allowed and contributes nothing", () => {
+  const B = computeBuilding(bld({ levels: [
+    { name: "G", rects: PRESETS.single.map(r => ({ ...r, mat: "laminate" })) },
+    { name: "Loft", rects: [] }
+  ]}));
+  assert.equal(B.levels.length, 2);
+  assert.equal(B.levels[1].planks, null);
+  assert.equal(B.levels[1].carpet, null);
+  assert.ok(B.planksUsed > 0);
+});
+
+test("a level too big to lay stops the whole building rather than half-reporting", () => {
+  const B = computeBuilding(bld({ levels: [
+    { name: "G", rects: [{ x: 0, y: 0, w: 4000, h: 3000, mat: "laminate" }] },
+    { name: "F", rects: [{ x: 0, y: 0, w: 5e6, h: 5e6, mat: "laminate" }] }
+  ]}));
+  assert.equal(B.overflow, true);
+});
+
+test("cost adds the two materials together", () => {
+  const st = bld({
+    levels: [{ name: "G", rects: [
+      { x: 0, y: 0, w: 4000, h: 3000, mat: "laminate" },
+      { x: 4000, y: 0, w: 2000, h: 3000, mat: "carpet" }
+    ]}],
+    priceBasis: "pack", price: 30, carpetPrice: 20
+  });
+  const B = computeBuilding(st);
+  assert.ok(B.plankCost > 0 && B.carpetCost > 0);
+  assert.ok(Math.abs(B.cost - (B.plankCost + B.carpetCost)) < 1e-9);
+  // Carpet is charged on what comes off the roll, not on the floor it covers.
+  assert.ok(Math.abs(B.carpetCost - B.carpetBought * 20) < 1e-9);
+  assert.ok(B.carpetBought >= B.carpetArea);
+});
+
+/* ---------------------------------------------------------------- */
 /* Saving and loading                                               */
 /* ---------------------------------------------------------------- */
 
-const { defaultPlan, serialisePlan, sanitisePlan, MAX_AREAS } =
-  new Function(source + "\nreturn { defaultPlan, serialisePlan, sanitisePlan, MAX_AREAS };")();
+const {
+  defaultPlan, serialisePlan, sanitisePlan, MAX_AREAS, MAX_LEVELS,
+  matOf, levelRects, computeCarpet, computeStairs, computeLevel, computeBuilding,
+  noseRuns, edgesOf, beyondEdge
+} = new Function(source +
+  "\nreturn { defaultPlan, serialisePlan, sanitisePlan, MAX_AREAS, MAX_LEVELS," +
+  "\n         matOf, levelRects, computeCarpet, computeStairs, computeLevel, computeBuilding," +
+  "\n         noseRuns, edgesOf, beyondEdge };")();
+
+/** A single-level building wrapped round some rectangles. */
+const bld = (over = {}) => ({
+  ...base, rollW: 4000, rollDir: "v", carpetPrice: 0,
+  stairs: { steps: 0, width: 900, tread: 280, riser: 175, mat: "carpet", nosing: true },
+  noseEdges: [],
+  levels: [{ name: "Ground floor", rects: PRESETS.l.map(r => ({ ...r, mat: "laminate" })) }],
+  ...over
+});
 
 test("a saved plan reloads exactly as it was", () => {
   const plan = {
     ...defaultPlan(),
     name: "Back bedroom",
     units: "m",
-    rects: [{ x: 0, y: 0, w: 3200, h: 2800 }, { x: 3200, y: 500, w: 1100, h: 1600 }],
+    levels: [
+      { name: "Ground floor", rects: [{ x: 0, y: 0, w: 3200, h: 2800, mat: "laminate" },
+                                      { x: 3200, y: 500, w: 1100, h: 1600, mat: "carpet" }] },
+      { name: "Loft", rects: [{ x: 0, y: 0, w: 3000, h: 2400, mat: "carpet" }] }
+    ],
+    rollW: 3660, rollDir: "h", carpetPrice: 24.5,
+    stairs: { steps: 13, width: 860, tread: 275, riser: 180, mat: "carpet", nosing: true },
+    noseEdges: [{ level: 0, rect: 0, side: "e" }],
     plankL: 600, plankW: 120, perPack: 10,
     pattern: "herringbone", hbAngle: 135, corner: "br", dir: "v",
     stagger: 450, reuse: false, minOff: 250, extra: 15,
@@ -548,10 +839,12 @@ test("a saved plan reloads exactly as it was", () => {
 });
 
 test("a saved plan still computes after the round trip", () => {
-  const before = computeLayout({ ...defaultPlan(), pattern: "herringbone", plankL: 600, plankW: 120 });
-  const { plan } = sanitisePlan(serialisePlan({ ...defaultPlan(), pattern: "herringbone", plankL: 600, plankW: 120 }));
-  const after = computeLayout(plan);
+  const start = { ...defaultPlan(), pattern: "herringbone", plankL: 600, plankW: 120 };
+  const before = computeBuilding(start);
+  const { plan } = sanitisePlan(serialisePlan(start));
+  const after = computeBuilding(plan);
   assert.equal(after.planksUsed, before.planksUsed);
+  assert.ok(after.planksUsed > 0);
 });
 
 test("junk in place of a plan is refused, not loaded", () => {
@@ -607,23 +900,32 @@ test("unreadable areas are dropped and reported", () => {
       null
     ]
   });
-  assert.equal(plan.rects.length, 1);
+  assert.equal(plan.levels[0].rects.length, 1);
   assert.ok(warnings.some(w => w.includes("skipped")));
 });
 
 test("a plan with no usable areas resets the room instead of drawing nothing", () => {
-  const { plan, warnings } = sanitisePlan({ rects: [] });
-  assert.deepEqual(plan.rects, defaultPlan().rects);
-  assert.ok(warnings.some(w => w.includes("reset")));
-  assert.ok(computeLayout(plan));
+  const { plan } = sanitisePlan({ rects: [] });
+  assert.deepEqual(plan.levels, defaultPlan().levels);
+  // Areas that were offered and all failed is the case worth saying something about.
+  const junk = sanitisePlan({ levels: [{ name: "x", rects: [{ w: -1, h: -1 }] }] });
+  assert.deepEqual(junk.plan.levels, defaultPlan().levels);
+  assert.ok(junk.warnings.some(w => w.includes("reset")));
+  assert.ok(computeBuilding(plan).planksUsed > 0);
 });
 
 test("a huge area list is capped", () => {
   const rects = Array.from({ length: MAX_AREAS + 12 },
     (_, i) => ({ x: i * 100, y: 0, w: 100, h: 100 }));
   const { plan, warnings } = sanitisePlan({ rects });
-  assert.equal(plan.rects.length, MAX_AREAS);
+  assert.equal(plan.levels[0].rects.length, MAX_AREAS);
   assert.ok(warnings.some(w => w.includes("first")));
+
+  const levels = Array.from({ length: MAX_LEVELS + 5 },
+    (_, i) => ({ name: `L${i}`, rects: [{ x: 0, y: 0, w: 1000, h: 1000 }] }));
+  const many = sanitisePlan({ levels });
+  assert.equal(many.plan.levels.length, MAX_LEVELS);
+  assert.ok(many.warnings.some(w => w.includes("levels")));
 });
 
 test("a file from something else loads with a warning, not a crash", () => {
@@ -633,7 +935,10 @@ test("a file from something else loads with a warning, not a crash", () => {
   assert.equal(ok, true);
   assert.equal(plan.plankL, 900);
   assert.equal(warnings.length, 2);      // wrong format, and a newer version
-  assert.ok(computeLayout(plan));
+  assert.ok(computeBuilding(plan).planksUsed > 0);
+  // Handed a whole plan, the single-floor engine finds no areas rather than
+  // throwing: sanitisePlan promises whatever it returns is acceptable here.
+  assert.equal(computeLayout(plan), null);
 });
 
 test("a bare plan without the file wrapper still loads", () => {
@@ -645,8 +950,10 @@ test("a bare plan without the file wrapper still loads", () => {
 
 test("defaultPlan hands back a fresh room every time", () => {
   const a = defaultPlan(), b = defaultPlan();
-  a.rects[0].w = 1;
-  assert.notEqual(b.rects[0].w, 1, "presets are being shared by reference");
+  a.levels[0].rects[0].w = 1;
+  assert.notEqual(b.levels[0].rects[0].w, 1, "presets are being shared by reference");
+  a.stairs.steps = 99;
+  assert.notEqual(b.stairs.steps, 99, "the flight is being shared by reference");
 });
 
 /* ---------------------------------------------------------------- */
